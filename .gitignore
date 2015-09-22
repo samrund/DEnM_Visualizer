@@ -1,1 +1,4 @@
 *.pyc
+*.xls
+*.txt
+test.py
