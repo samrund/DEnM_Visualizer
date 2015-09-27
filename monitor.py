@@ -1,6 +1,7 @@
 import wx
 import time
 
+from time import strftime
 from threading import Thread
 
 import matplotlib as mpl
@@ -10,7 +11,9 @@ from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 class Interface(wx.Frame):
 
 	def __init__(self, parent, title, inputs):
-		super(Interface, self).__init__(parent, title=title, size=(570, 65 + len(inputs) * 170))
+		super(Interface, self).__init__(parent, title=title, size=(570, 65 + len(inputs) * 170 + 25))
+
+		self.header = None
 
 		self.plot_panels = {}
 		self.init_ui(inputs)
@@ -19,39 +22,53 @@ class Interface(wx.Frame):
 
 		self.monitors = []
 		for input in inputs:
-			self.monitors.append(Monitor(input, self.plot_panels))
+			self.monitors.append(Monitor(self.update_title, input, self.plot_panels))
+
+		self.start()
 
 	def init_ui(self, inputs):
 		panel = wx.Panel(self)
-		sizer = wx.GridBagSizer(len(inputs) + 1, 2)
+		sizer = wx.GridBagSizer(len(inputs) + 1, 3)
 
 		for input in inputs:
 			self.plot_panels[input] = PlotPanel(panel)
+
+		# BLOCK 0
+		# #######
+
+		self.header = wx.StaticText(panel, wx.ID_ANY, label='Loading data...')
+		sizer.Add(self.header, pos=(0, 0), span=(1, 2), flag=wx.LEFT | wx.TOP, border=5)
 
 		# BLOCK 1
 		# #######
 
 		for n in range(len(inputs)):
-			sizer.Add(self.plot_panels[inputs[n]], pos=(n, 0), span=(1, 2), flag=wx.ALL, border=5)
+			sizer.Add(self.plot_panels[inputs[n]], pos=(1 + n, 0), span=(1, 2), flag=wx.ALL, border=5)
 
 		# BLOCK 2
 		# #######
 		button_cancel = wx.Button(panel, label="Exit")
 		button_cancel.Bind(wx.EVT_BUTTON, self.close_window)
-		sizer.Add(button_cancel, pos=(len(inputs), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
+		sizer.Add(button_cancel, pos=(1 + len(inputs), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
 
-		button_start = wx.Button(panel, label="Start")
-		button_start.Bind(wx.EVT_BUTTON, self.start)
-		sizer.Add(button_start, pos=(len(inputs), 1), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
+		# button_start = wx.Button(panel, label="Start")
+		# button_start.Bind(wx.EVT_BUTTON, self.start)
+		# sizer.Add(button_start, pos=(1 + len(inputs), 1), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
 
 		panel.SetSizer(sizer)
+
+	def update_title(self):
+		actual_time = strftime("%H:%M:%S")
+		print('Last time of recording: ' + str(actual_time))
+		self.header.SetLabel('Last time of recording: ' + str(actual_time))
 
 	def close_window(self, event):
 		self.Destroy()
 
-	def start(self, event):
+	def start(self):
 		for monitor in self.monitors:
 			thread = Thread(target=monitor.start)
+			thread.daemon = True
 			thread.start()
 
 class PlotPanel(wx.Panel):
@@ -80,15 +97,17 @@ class PlotPanel(wx.Panel):
 		self.canvas.draw()
 
 class Monitor:
-	def __init__(self, filename, plot_panels):
+	def __init__(self, update_title, filename, plot_panels):
 		self.filename = filename
 		self.plot_panel = plot_panels[filename]
 		self.vals = []
+		self.update_title = update_title
 
 		self.content_file = open(self.filename, 'r')
 
 	def start(self):
 		line = None
+		reached_end = False
 		while 1:
 			where = self.content_file.tell()
 			last = line
@@ -97,10 +116,17 @@ class Monitor:
 			try:
 				light = int(last.split(' ')[2].split('\t')[10])
 				self.vals.append(light)
+
+				if reached_end:
+					self.update_title()
 			except:
 				pass
 
 			if not line:
+				if not reached_end:
+					reached_end = True
+					self.update_title()
+
 				self.plot_panel.draw(self.vals[-120:], "minutes", "light")
 
 				time.sleep(1)
