@@ -10,7 +10,7 @@ from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 class Interface(wx.Frame):
 
 	def __init__(self, parent, title, inputs):
-		super(Interface, self).__init__(parent, title=title, size=(530, 60 + len(inputs) * 175))
+		super(Interface, self).__init__(parent, title=title, size=(570, 65 + len(inputs) * 170))
 
 		self.plot_panels = {}
 		self.init_ui(inputs)
@@ -55,21 +55,27 @@ class Interface(wx.Frame):
 			thread.start()
 
 class PlotPanel(wx.Panel):
-	def __init__(self, parent, id=-1, dpi=None, **kwargs):
+	def __init__(self, parent, id=-1, dpi=80, **kwargs):
 		wx.Panel.__init__(self, parent, id=id, **kwargs)
-		self.figure = mpl.figure.Figure(dpi=dpi, figsize=(2, 2))
+		self.figure = mpl.figure.Figure(dpi=dpi, figsize=(7, 2))
+		self.figure.subplots_adjust(bottom=0.25)
+		self.figure.subplots_adjust(left=0.1)
 		self.canvas = Canvas(self, -1, self.figure)
 		self.canvas.draw()
 
 		sizer = wx.BoxSizer(wx.VERTICAL)
 		sizer.Add(self.canvas, 1, wx.EXPAND)
 		self.SetSizer(sizer)
-		sizer.SetMinSize((500, 100))
+		# sizer.SetMinSize((500, 130))
 		self.sizer = sizer
 
-	def draw(self, vals):
+	def draw(self, vals, label_x='', label_y=''):
 		self.figure.clear()
 		axes = self.figure.gca()
+		axes.invert_xaxis()
+		axes.set_xlabel(label_x)
+		axes.set_ylabel(label_y)
+		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
 		axes.plot(range(len(vals)), vals, "-o", color='r', label='r')
 		self.canvas.draw()
 
@@ -95,7 +101,7 @@ class Monitor:
 				pass
 
 			if not line:
-				self.plot_panel.draw(self.vals[-10:])
+				self.plot_panel.draw(self.vals[-120:], "minutes", "light")
 
 				time.sleep(1)
 				self.content_file.seek(where)
