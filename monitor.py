@@ -93,7 +93,7 @@ class PlotPanel(wx.Panel):
 		axes.set_xlabel(label_x)
 		axes.set_ylabel(label_y)
 		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
-		axes.plot(range(len(vals)), vals, "-o", color='r', label='r')
+		axes.plot(list(reversed(range(len(vals)))), vals, "-o", color='r', label='r')
 		self.canvas.draw()
 
 class Monitor:
