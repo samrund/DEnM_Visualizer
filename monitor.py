@@ -3,10 +3,126 @@ import time
 
 from time import strftime
 from threading import Thread
+from ConfigParser import SafeConfigParser
 
 import matplotlib as mpl
 mpl.use('WXAgg')
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
+
+class BrowseFolderButton(wx.Button):
+
+	def __init__(self, *args, **kw):
+		super(BrowseFolderButton, self).__init__(*args, **kw)
+
+		self._defaultDirectory = '/'
+		self.target = None
+		self.Bind(wx.EVT_BUTTON, self.on_botton_clicked)
+
+	def on_botton_clicked(self, e):
+		dialog = wx.DirDialog(None, "Choose input directory", "", wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST)
+
+		if dialog.ShowModal() == wx.ID_OK:
+			if self.target:
+				self.target.SetValue(dialog.GetPath())
+
+		dialog.Destroy()
+		e.Skip()
+
+class Settings(wx.Dialog):
+
+	def __init__(self, *args, **kw):
+		super(Settings, self).__init__(*args, **kw)
+
+		self.target_folder = None
+		self.target_folder_value = ''
+
+		self.load_config()
+
+		self.init_ui()
+		self.SetSize((400, 140))
+		self.SetTitle("Settings")
+
+	def init_ui(self):
+
+		panel = wx.Panel(self)
+		vbox = wx.BoxSizer(wx.VERTICAL)
+
+		# INPUT FOLDER
+		sb = wx.StaticBox(panel, label='Input folder')
+		sbs = wx.StaticBoxSizer(sb, orient=wx.VERTICAL)
+
+		hbox = wx.BoxSizer(wx.HORIZONTAL)
+		self.target_folder = wx.TextCtrl(panel, value=self.target_folder_value, size=(250, -1))
+		hbox.Add(self.target_folder, flag=wx.LEFT | wx.TOP | wx.EXPAND, border=5)
+
+		browse_button = BrowseFolderButton(panel, label="Browse...")
+		browse_button.target = self.target_folder
+		hbox.Add(browse_button, flag=wx.LEFT | wx.TOP | wx.RIGHT, border=5)
+
+		sbs.Add(hbox)
+		vbox.Add(sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
+
+		# # LISTBOX
+		# sb = wx.StaticBox(panel, label='Columns')
+		# sbs = wx.StaticBoxSizer(sb, orient=wx.VERTICAL)
+
+		# self.list_box = wx.ListBox(
+		# 	choices=[],
+		# 	name='listBox',
+		# 	parent=panel,
+		# 	pos=wx.Point(8, 48),
+		# 	size=wx.Size(184, 256),
+		# 	style=0)
+
+		# self.list_box.Append("Andreas")
+		# self.list_box.Append("Erich")
+
+		# sbs.Add(self.list_box)
+
+		# vbox.Add(sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
+
+		# # BUTTON BOX
+		# hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+		# add_button = wx.Button(panel, label='Add')
+		# remove_button = wx.Button(panel, label='Remove')
+		# hbox2.Add(add_button, proportion=1, flag=wx.RIGHT, border=5)
+		# hbox2.Add(remove_button, proportion=1, flag=wx.LEFT, border=5)
+
+		# vbox.Add(hbox2, flag=wx.ALIGN_CENTER | wx.BOTTOM, border=10)
+
+		# BUTTON BOX
+		hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+		ok_button = wx.Button(panel, label='Ok')
+		close_button = wx.Button(panel, label='Close')
+		hbox2.Add(ok_button, proportion=1, flag=wx.RIGHT, border=0)
+		hbox2.Add(close_button, proportion=1, flag=wx.LEFT, border=0)
+
+		vbox.Add(hbox2, flag=wx.ALIGN_CENTER | wx.TOP | wx.BOTTOM, border=10)
+
+		panel.SetSizer(vbox)
+
+		ok_button.Bind(wx.EVT_BUTTON, self.on_save)
+		close_button.Bind(wx.EVT_BUTTON, self.on_close)
+
+	def load_config(self):
+		print('Loading config data...')
+		config = SafeConfigParser()
+		config.read('config.ini')
+
+		self.target_folder_value = config.get('main', 'input_folder')
+
+	def on_close(self, e):
+		self.Close(True)
+
+	def on_save(self, e):
+		print('Saving config data...')
+		config = SafeConfigParser()
+		config.add_section('main')
+		config.set('main', 'input_folder', self.target_folder.GetValue())
+
+		with open('config.ini', 'w') as f:
+			config.write(f)
+		self.Close(True)
 
 class Interface(wx.Frame):
 
@@ -51,11 +167,16 @@ class Interface(wx.Frame):
 		button_cancel.Bind(wx.EVT_BUTTON, self.close_window)
 		sizer.Add(button_cancel, pos=(1 + len(inputs), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
 
-		# button_start = wx.Button(panel, label="Start")
-		# button_start.Bind(wx.EVT_BUTTON, self.start)
-		# sizer.Add(button_start, pos=(1 + len(inputs), 1), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
+		button_start = wx.Button(panel, label="Settings")
+		button_start.Bind(wx.EVT_BUTTON, self.show_settings)
+		sizer.Add(button_start, pos=(1 + len(inputs), 1), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
 
 		panel.SetSizer(sizer)
+
+	def show_settings(self, event):
+		modal = Settings(None)
+		modal.ShowModal()
+		modal.Destroy()
 
 	def update_title(self):
 		actual_time = strftime("%H:%M:%S")
