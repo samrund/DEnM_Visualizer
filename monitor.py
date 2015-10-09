@@ -1,4 +1,5 @@
 import wx
+import os
 import time
 
 from time import strftime
@@ -33,8 +34,8 @@ class Settings(wx.Dialog):
 	def __init__(self, *args, **kw):
 		super(Settings, self).__init__(*args, **kw)
 
-		self.target_folder = None
-		self.target_folder_value = ''
+		self.input_folder = None
+		self.input_folder_value = ''
 
 		self.load_config()
 
@@ -52,11 +53,11 @@ class Settings(wx.Dialog):
 		sbs = wx.StaticBoxSizer(sb, orient=wx.VERTICAL)
 
 		hbox = wx.BoxSizer(wx.HORIZONTAL)
-		self.target_folder = wx.TextCtrl(panel, value=self.target_folder_value, size=(250, -1))
-		hbox.Add(self.target_folder, flag=wx.LEFT | wx.TOP | wx.EXPAND, border=5)
+		self.input_folder = wx.TextCtrl(panel, value=self.input_folder_value, size=(250, -1))
+		hbox.Add(self.input_folder, flag=wx.LEFT | wx.TOP | wx.EXPAND, border=5)
 
 		browse_button = BrowseFolderButton(panel, label="Browse...")
-		browse_button.target = self.target_folder
+		browse_button.target = self.input_folder
 		hbox.Add(browse_button, flag=wx.LEFT | wx.TOP | wx.RIGHT, border=5)
 
 		sbs.Add(hbox)
@@ -109,7 +110,7 @@ class Settings(wx.Dialog):
 		config = SafeConfigParser()
 		config.read('config.ini')
 
-		self.target_folder_value = config.get('main', 'input_folder')
+		self.input_folder_value = config.get('main', 'input_folder')
 
 	def on_close(self, e):
 		self.Close(True)
@@ -118,7 +119,7 @@ class Settings(wx.Dialog):
 		print('Saving config data...')
 		config = SafeConfigParser()
 		config.add_section('main')
-		config.set('main', 'input_folder', self.target_folder.GetValue())
+		config.set('main', 'input_folder', self.input_folder.GetValue())
 
 		with open('config.ini', 'w') as f:
 			config.write(f)
@@ -126,21 +127,49 @@ class Settings(wx.Dialog):
 
 class Interface(wx.Frame):
 
-	def __init__(self, parent, title, inputs):
-		super(Interface, self).__init__(parent, title=title, size=(570, 65 + len(inputs) * 170 + 25))
+	def __init__(self, parent, title):
+		super(Interface, self).__init__(parent, title=title, size=(570, 95))
 
 		self.header = None
-
+		self.input_folder_value = ''
 		self.plot_panels = {}
-		self.init_ui(inputs)
+
+		self.load_config()
+
+		input_files = []
+		if self.input_folder_value is not '':
+			input_files = self.get_input_files(self.input_folder_value)
+			print input_files
+
+			w, h = self.GetClientSize()
+			self.SetSize((w, h + len(input_files) * 175))
+		else:
+			print 'ERROR: no input folder defined'
+
+		self.init_ui(input_files)
 		self.Centre()
 		self.Show()
 
 		self.monitors = []
-		for input in inputs:
+		for input in input_files:
 			self.monitors.append(Monitor(self.update_title, input, self.plot_panels))
 
 		self.start()
+
+	def load_config(self):
+		print('Loading config data...')
+		config = SafeConfigParser()
+		config.read('config.ini')
+
+		self.input_folder_value = config.get('main', 'input_folder')
+
+	def get_input_files(self, path):
+		files = []
+		for file in sorted(os.listdir(path)):
+			if file.endswith(".txt"):
+				files.append(path + "/" + file)
+
+		return files
 
 	def init_ui(self, inputs):
 		panel = wx.Panel(self)
@@ -235,6 +264,7 @@ class Monitor:
 			line = self.content_file.readline()
 
 			try:
+				# get light values and add them to the list
 				light = int(last.split(' ')[2].split('\t')[10])
 				self.vals.append(light)
 
@@ -248,6 +278,11 @@ class Monitor:
 					reached_end = True
 					self.update_title()
 
+				# redraw the plot with the last X values
+				if not self.vals:
+					print "breaking"
+					break
+
 				self.plot_panel.draw(self.vals[-120:], "minutes", "light")
 
 				time.sleep(1)
@@ -258,8 +293,7 @@ class Monitor:
 
 def main():
 	app = wx.App()
-	inputs = ['Monitor10.txt', 'Monitor11.txt', 'Monitor14.txt']
-	Interface(None, title='Environment Monitor', inputs=inputs)
+	Interface(None, title='Environment Monitor')
 	app.MainLoop()
 
 if __name__ == "__main__":
