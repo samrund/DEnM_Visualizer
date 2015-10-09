@@ -10,6 +10,9 @@ import matplotlib as mpl
 mpl.use('WXAgg')
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 
+
+do_restart = False
+
 class BrowseFolderButton(wx.Button):
 
 	def __init__(self, *args, **kw):
@@ -31,9 +34,10 @@ class BrowseFolderButton(wx.Button):
 
 class Settings(wx.Dialog):
 
-	def __init__(self, *args, **kw):
-		super(Settings, self).__init__(*args, **kw)
+	def __init__(self, parent):
+		super(Settings, self).__init__(parent)
 
+		self.parent = parent
 		self.input_folder = None
 		self.input_folder_value = ''
 
@@ -124,6 +128,7 @@ class Settings(wx.Dialog):
 		with open('config.ini', 'w') as f:
 			config.write(f)
 		self.Close(True)
+		self.parent.restart()
 
 class Interface(wx.Frame):
 
@@ -203,7 +208,7 @@ class Interface(wx.Frame):
 		panel.SetSizer(sizer)
 
 	def show_settings(self, event):
-		modal = Settings(None)
+		modal = Settings(self)
 		modal.ShowModal()
 		modal.Destroy()
 
@@ -215,11 +220,20 @@ class Interface(wx.Frame):
 	def close_window(self, event):
 		self.Destroy()
 
+	def restart(self):
+		global do_restart
+
+		print '\nRestarting...\n\n'
+
+		do_restart = True
+		self.close_window(None)
+
 	def start(self):
 		for monitor in self.monitors:
 			thread = Thread(target=monitor.start)
 			thread.daemon = True
 			thread.start()
+
 
 class PlotPanel(wx.Panel):
 	def __init__(self, parent, id=-1, dpi=80, **kwargs):
@@ -292,9 +306,18 @@ class Monitor:
 				# print line
 
 def main():
+	global do_restart
 	app = wx.App()
-	Interface(None, title='Environment Monitor')
-	app.MainLoop()
+
+	while True:
+		Interface(None, title='Environment Monitor')
+		app.MainLoop()
+
+		if not do_restart:
+			break
+
+		do_restart = False
+
 
 if __name__ == "__main__":
 	main()
