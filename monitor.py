@@ -133,7 +133,7 @@ class Settings(wx.Dialog):
 class Interface(wx.Frame):
 
 	def __init__(self, parent, title):
-		super(Interface, self).__init__(parent, title=title, size=(570, 95))
+		super(Interface, self).__init__(parent, title=title, size=(570, 100))
 
 		self.header = None
 		self.input_folder_value = ''
@@ -186,8 +186,13 @@ class Interface(wx.Frame):
 		# BLOCK 0
 		# #######
 
-		self.header = wx.StaticText(panel, wx.ID_ANY, label='Loading data...')
-		sizer.Add(self.header, pos=(0, 0), span=(1, 2), flag=wx.LEFT | wx.TOP, border=5)
+		self.header = None
+		if not inputs:
+			self.header = wx.StaticText(panel, wx.ID_ANY, label='No input files found. Please change the input folder in Settings.')
+			sizer.Add(self.header, pos=(0, 0), span=(1, 2), flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
+		else:
+			self.header = wx.StaticText(panel, wx.ID_ANY, label='Loading data...')
+			sizer.Add(self.header, pos=(0, 0), span=(1, 2), flag=wx.LEFT | wx.TOP, border=5)
 
 		# BLOCK 1
 		# #######
@@ -212,10 +217,13 @@ class Interface(wx.Frame):
 		modal.ShowModal()
 		modal.Destroy()
 
-	def update_title(self):
-		actual_time = strftime("%H:%M:%S")
-		print('Last time of recording: ' + str(actual_time))
-		self.header.SetLabel('Last time of recording: ' + str(actual_time))
+	def update_title(self, text=None):
+		if text:
+			self.header.SetLabel(str(text))
+		else:
+			actual_time = strftime("%H:%M:%S")
+			print('Last time of recording: ' + str(actual_time))
+			self.header.SetLabel('Last time of recording: ' + str(actual_time))
 
 	def close_window(self, event):
 		self.Destroy()
@@ -294,7 +302,8 @@ class Monitor:
 
 				# redraw the plot with the last X values
 				if not self.vals:
-					print "breaking"
+					self.update_title("Problem with reading some content!")
+					print "Thread: breaking!"
 					break
 
 				self.plot_panel.draw(self.vals[-120:], "minutes", "light")
