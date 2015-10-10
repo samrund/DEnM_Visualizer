@@ -178,6 +178,8 @@ class Interface(wx.Frame):
 		self.load_input(self.current_input)
 
 	def load_input(self, target_input):
+		self.monitors_terminate()
+
 		self.monitors = []
 		if self.input_files:
 			# updates the filename in GUI and repositions elements
@@ -185,7 +187,7 @@ class Interface(wx.Frame):
 			self.panel.Layout()
 
 			self.monitors.append(Monitor(self.update_title, self.input_files[target_input], self.plot_panels, self.attributes))
-			self.start()
+			self.monitors_start()
 
 	def load_config(self):
 		print('Loading config data...')
@@ -299,9 +301,13 @@ class Interface(wx.Frame):
 		do_restart = True
 		self.close_window(None)
 
-	def start(self):
+	def monitors_terminate(self):
 		for monitor in self.monitors:
-			thread = Thread(target=monitor.start)
+			monitor.terminate()
+
+	def monitors_start(self):
+		for monitor in self.monitors:
+			thread = Thread(target=monitor.run)
 			thread.daemon = True
 			thread.start()
 
@@ -340,19 +346,19 @@ class Monitor:
 		self.plot_panel = plot_panels
 		self.vals = {}
 		self.update_title = update_title
+		self.alive = True
+		self.delay_in_seconds = 1
 
 		self.attributes = attributes
 		for attribute in attributes:
 			self.vals[attribute] = []
 
-		self.delay_in_seconds = 1
-
 		self.content_file = open(self.filename, 'r')
 
-	def start(self):
+	def main(self):
 		line = None
 		reached_end = False
-		while 1:
+		while self.alive:
 			where = self.content_file.tell()
 			last = line
 			line = self.content_file.readline()
@@ -395,6 +401,15 @@ class Monitor:
 			else:
 				pass
 				# print line
+
+		print "Thread: Terminated"
+
+	def run(self):
+		self.alive = True
+		self.main()
+
+	def terminate(self):
+		self.alive = False
 
 def main():
 	global do_restart
