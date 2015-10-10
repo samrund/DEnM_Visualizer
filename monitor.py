@@ -138,28 +138,50 @@ class Interface(wx.Frame):
 		self.header = None
 		self.input_folder_value = ''
 		self.plot_panels = {}
+		self.current_input = 0
+		self.monitors = []
+
+		self.attributes = {
+			'Light': {
+				'col': 10,
+				'unit': 'Lux'
+			},
+			'Temperature': {
+				'col': 15,
+				'unit': 'Celsius X 10'
+			},
+			'Humidity': {
+				'col': 20,
+				'unit': 'R.H.'
+			}
+		}
+
+		w, h = self.GetClientSize()
+		self.SetSize((w, h + len(self.attributes) * (199)))
 
 		self.load_config()
 
-		input_files = []
+		self.input_files = []
 		if self.input_folder_value is not '':
-			input_files = self.get_input_files(self.input_folder_value)
-			print input_files
-
-			w, h = self.GetClientSize()
-			self.SetSize((w, h + len(input_files) * 175))
+			self.input_files = self.get_input_files(self.input_folder_value)
+			print self.input_files
 		else:
 			print 'ERROR: no input folder defined'
 
-		self.init_ui(input_files)
+		if self.input_files:
+			self.init_ui(self.input_files[self.current_input])
+		else:
+			self.init_ui(None)
+
 		self.Centre()
 		self.Show()
+		self.load_input(self.current_input)
 
+	def load_input(self, target_input):
 		self.monitors = []
-		for input in input_files:
-			self.monitors.append(Monitor(self.update_title, input, self.plot_panels))
-
-		self.start()
+		if self.input_files:
+			self.monitors.append(Monitor(self.update_title, self.input_files[target_input], self.plot_panels, self.attributes))
+			self.start()
 
 	def load_config(self):
 		print('Loading config data...')
@@ -176,18 +198,21 @@ class Interface(wx.Frame):
 
 		return files
 
-	def init_ui(self, inputs):
+	def init_ui(self, input):
 		panel = wx.Panel(self)
-		sizer = wx.GridBagSizer(len(inputs) + 1, 3)
+		sizer = wx.GridBagSizer(len(self.attributes) + 1, 3)
 
-		for input in inputs:
-			self.plot_panels[input] = PlotPanel(panel)
+		# for input in inputs:
+		# 	self.plot_panels[input] = PlotPanel(panel)
+
+		for attribute in self.attributes:
+			self.plot_panels[attribute] = PlotPanel(panel)
 
 		# BLOCK 0
 		# #######
 
 		self.header = None
-		if not inputs:
+		if not input:
 			self.header = wx.StaticText(panel, wx.ID_ANY, label='No input files found. Please change the input folder in Settings.')
 			sizer.Add(self.header, pos=(0, 0), span=(1, 2), flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
 		else:
@@ -197,18 +222,20 @@ class Interface(wx.Frame):
 		# BLOCK 1
 		# #######
 
-		for n in range(len(inputs)):
-			sizer.Add(self.plot_panels[inputs[n]], pos=(1 + n, 0), span=(1, 2), flag=wx.ALL, border=5)
+		position = 0
+		for attribute in self.attributes:
+			sizer.Add(self.plot_panels[attribute], pos=(1 + position, 0), span=(1, 2), flag=wx.ALL, border=5)
+			position += 1
 
 		# BLOCK 2
 		# #######
 		button_cancel = wx.Button(panel, label="Exit")
 		button_cancel.Bind(wx.EVT_BUTTON, self.close_window)
-		sizer.Add(button_cancel, pos=(1 + len(inputs), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
+		sizer.Add(button_cancel, pos=(1 + len(self.attributes), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
 
 		button_start = wx.Button(panel, label="Settings")
 		button_start.Bind(wx.EVT_BUTTON, self.show_settings)
-		sizer.Add(button_start, pos=(1 + len(inputs), 1), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
+		sizer.Add(button_start, pos=(1 + len(self.attributes), 1), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
 
 		panel.SetSizer(sizer)
 
@@ -246,9 +273,11 @@ class Interface(wx.Frame):
 class PlotPanel(wx.Panel):
 	def __init__(self, parent, id=-1, dpi=80, **kwargs):
 		wx.Panel.__init__(self, parent, id=id, **kwargs)
-		self.figure = mpl.figure.Figure(dpi=dpi, figsize=(7, 2))
-		self.figure.subplots_adjust(bottom=0.25)
+		self.figure = mpl.figure.Figure(dpi=dpi, figsize=(7, 2.3))
+		self.figure.subplots_adjust(top=0.87)
+		self.figure.subplots_adjust(bottom=0.2)
 		self.figure.subplots_adjust(left=0.1)
+		self.figure.subplots_adjust(right=0.92)
 		self.canvas = Canvas(self, -1, self.figure)
 		self.canvas.draw()
 
@@ -258,22 +287,29 @@ class PlotPanel(wx.Panel):
 		# sizer.SetMinSize((500, 130))
 		self.sizer = sizer
 
-	def draw(self, vals, label_x='', label_y=''):
+	def draw(self, vals, label='', label_x='', label_y=''):
 		self.figure.clear()
 		axes = self.figure.gca()
 		axes.invert_xaxis()
 		axes.set_xlabel(label_x)
 		axes.set_ylabel(label_y)
+		axes.set_title(label)
 		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
 		axes.plot(list(reversed(range(len(vals)))), vals, "-o", color='r', label='r')
 		self.canvas.draw()
 
 class Monitor:
-	def __init__(self, update_title, filename, plot_panels):
+	def __init__(self, update_title, filename, plot_panels, attributes):
 		self.filename = filename
-		self.plot_panel = plot_panels[filename]
-		self.vals = []
+		self.plot_panel = plot_panels
+		self.vals = {}
 		self.update_title = update_title
+
+		self.attributes = attributes
+		for attribute in attributes:
+			self.vals[attribute] = []
+
+		self.delay_in_seconds = 1
 
 		self.content_file = open(self.filename, 'r')
 
@@ -286,9 +322,10 @@ class Monitor:
 			line = self.content_file.readline()
 
 			try:
-				# get light values and add them to the list
-				light = int(last.split(' ')[2].split('\t')[10])
-				self.vals.append(light)
+				# get all values and add them to the list
+				for attribute in self.attributes:
+					val = int(last.split(' ')[2].split('\t')[self.attributes[attribute]['col']])
+					self.vals[attribute].append(val)
 
 				if reached_end:
 					self.update_title()
@@ -300,15 +337,24 @@ class Monitor:
 					reached_end = True
 					self.update_title()
 
-				# redraw the plot with the last X values
-				if not self.vals:
+				# Check for erroneous input
+				#
+				valid = True
+				for attribute in self.attributes:
+					if not self.vals[attribute]:
+						valid = False
+						break
+
+				if not valid:
 					self.update_title("Problem with reading some content!")
 					print "Thread: breaking!"
 					break
 
-				self.plot_panel.draw(self.vals[-120:], "minutes", "light")
+				# redraw the plot with the last X values
+				for attribute in self.attributes:
+					self.plot_panel[attribute].draw(self.vals[attribute][-120:], attribute, "minutes", self.attributes[attribute]['unit'])
 
-				time.sleep(1)
+				time.sleep(self.delay_in_seconds)
 				self.content_file.seek(where)
 			else:
 				pass
