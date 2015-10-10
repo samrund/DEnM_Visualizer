@@ -180,6 +180,10 @@ class Interface(wx.Frame):
 	def load_input(self, target_input):
 		self.monitors = []
 		if self.input_files:
+			# updates the filename in GUI and repositions elements
+			self.current_filename.SetLabel(self.get_formatted_filename_from_path(self.input_files[target_input]))
+			self.panel.Layout()
+
 			self.monitors.append(Monitor(self.update_title, self.input_files[target_input], self.plot_panels, self.attributes))
 			self.start()
 
@@ -198,46 +202,78 @@ class Interface(wx.Frame):
 
 		return files
 
+	def get_formatted_filename_from_path(self, path):
+		if path:
+			appendix = ' (' + str(self.current_input + 1) + '/' + str(len(self.input_files)) + ')'
+			return path.split('/')[-1:][0] + appendix
+
+		return '<Error>'
+
 	def init_ui(self, input):
-		panel = wx.Panel(self)
-		sizer = wx.GridBagSizer(len(self.attributes) + 1, 3)
+		self.panel = wx.Panel(self)
+		sizer = wx.GridBagSizer(len(self.attributes) + 1, 4)
 
 		# for input in inputs:
 		# 	self.plot_panels[input] = PlotPanel(panel)
 
 		for attribute in self.attributes:
-			self.plot_panels[attribute] = PlotPanel(panel)
+			self.plot_panels[attribute] = PlotPanel(self.panel)
 
 		# BLOCK 0
 		# #######
 
 		self.header = None
 		if not input:
-			self.header = wx.StaticText(panel, wx.ID_ANY, label='No input files found. Please change the input folder in Settings.')
-			sizer.Add(self.header, pos=(0, 0), span=(1, 2), flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
+			self.header = wx.StaticText(self.panel, wx.ID_ANY, label='No input files found. Please change the input folder in Settings.')
+			sizer.Add(self.header, pos=(0, 0), span=(1, 3), flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
 		else:
-			self.header = wx.StaticText(panel, wx.ID_ANY, label='Loading data...')
-			sizer.Add(self.header, pos=(0, 0), span=(1, 2), flag=wx.LEFT | wx.TOP, border=5)
+			self.header = wx.StaticText(self.panel, wx.ID_ANY, label='Loading data...')
+			sizer.Add(self.header, pos=(0, 0), span=(1, 3), flag=wx.LEFT | wx.TOP, border=5)
+
+		self.current_filename = wx.StaticText(self.panel, wx.ID_ANY, label='Loading data...')
+		sizer.Add(self.current_filename, pos=(0, 3), span=(1, 1), flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.ALIGN_RIGHT, border=5)
 
 		# BLOCK 1
 		# #######
 
 		position = 0
 		for attribute in self.attributes:
-			sizer.Add(self.plot_panels[attribute], pos=(1 + position, 0), span=(1, 2), flag=wx.ALL, border=5)
+			sizer.Add(self.plot_panels[attribute], pos=(1 + position, 0), span=(1, 4), flag=wx.ALL, border=5)
 			position += 1
 
 		# BLOCK 2
 		# #######
-		button_cancel = wx.Button(panel, label="Exit")
+		button_cancel = wx.Button(self.panel, label="Exit")
 		button_cancel.Bind(wx.EVT_BUTTON, self.close_window)
 		sizer.Add(button_cancel, pos=(1 + len(self.attributes), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
 
-		button_start = wx.Button(panel, label="Settings")
-		button_start.Bind(wx.EVT_BUTTON, self.show_settings)
-		sizer.Add(button_start, pos=(1 + len(self.attributes), 1), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
+		button_start = wx.Button(self.panel, label="<")
+		button_start.Bind(wx.EVT_BUTTON, self.change_input_backward)
+		sizer.Add(button_start, pos=(1 + len(self.attributes), 1), flag=wx.LEFT | wx.ALIGN_RIGHT, border=100)
 
-		panel.SetSizer(sizer)
+		button_start = wx.Button(self.panel, label=">")
+		button_start.Bind(wx.EVT_BUTTON, self.change_input_forward)
+		sizer.Add(button_start, pos=(1 + len(self.attributes), 2), flag=wx.ALIGN_LEFT, border=5)
+
+		button_start = wx.Button(self.panel, label="Settings")
+		button_start.Bind(wx.EVT_BUTTON, self.show_settings)
+		sizer.Add(button_start, pos=(1 + len(self.attributes), 3), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
+
+		self.panel.SetSizer(sizer)
+
+	def change_input_backward(self, event):
+		self.current_input -= 1
+		if self.current_input < 0:
+			self.current_input = len(self.input_files) - 1
+
+		self.load_input(self.current_input)
+
+	def change_input_forward(self, event):
+		self.current_input += 1
+		if self.current_input >= len(self.input_files):
+			self.current_input = 0
+
+		self.load_input(self.current_input)
 
 	def show_settings(self, event):
 		modal = Settings(self)
