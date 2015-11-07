@@ -148,7 +148,8 @@ class Interface(wx.Frame):
 			},
 			'Temperature': {
 				'col': 15,
-				'unit': 'Celsius X 10'
+				'unit': 'Celsius',
+				'function': 'x * 0.1'
 			},
 			'Humidity': {
 				'col': 20,
@@ -367,6 +368,11 @@ class Monitor:
 				# get all values and add them to the list
 				for attribute in self.attributes:
 					val = int(last.split(' ')[2].split('\t')[self.attributes[attribute]['col']])
+					# apply lambda function if defined
+					if 'function' in self.attributes[attribute]:
+						fun = lambda x: eval(self.attributes[attribute]['function'])
+						val = fun(val)
+
 					self.vals[attribute].append(val)
 
 				if reached_end:
@@ -416,7 +422,7 @@ def main():
 	app = wx.App()
 
 	while True:
-		Interface(None, title='Environment Monitor')
+		Interface(None, title='Monitors')
 		app.MainLoop()
 
 		if not do_restart:
