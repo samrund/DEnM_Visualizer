@@ -1,10 +1,11 @@
 import wx
 import os
 import time
+import json
 
 from time import strftime
 from threading import Thread
-from ConfigParser import SafeConfigParser
+from ConfigParser import SafeConfigParser, NoOptionError
 
 import matplotlib as mpl
 mpl.use('WXAgg')
@@ -13,21 +14,23 @@ from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 
 do_restart = False
 
-class BrowseFolderButton(wx.Button):
+class BrowseFileButton(wx.Button):
 
 	def __init__(self, *args, **kw):
-		super(BrowseFolderButton, self).__init__(*args, **kw)
+		super(BrowseFileButton, self).__init__(*args, **kw)
 
 		self._defaultDirectory = '/'
 		self.target = None
 		self.Bind(wx.EVT_BUTTON, self.on_botton_clicked)
 
 	def on_botton_clicked(self, e):
-		dialog = wx.DirDialog(None, "Choose input directory", "", wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST)
+		dialog = wx.FileDialog(
+			self, 'Open TXT file', '', '',
+			'TXT files (*.txt)|*.txt', wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
 
 		if dialog.ShowModal() == wx.ID_OK:
 			if self.target:
-				self.target.SetValue(dialog.GetPath())
+				self.target(dialog.GetPath())
 
 		dialog.Destroy()
 		e.Skip()
@@ -40,12 +43,14 @@ class Settings(wx.Dialog):
 		self.parent = parent
 		self.input_folder = None
 		self.input_folder_value = ''
-
-		self.load_config()
+		self.input_list = None
+		self.input_list_index = 0
 
 		self.init_ui()
-		self.SetSize((400, 140))
+		self.SetSize((400, 270))
 		self.SetTitle("Settings")
+
+		self.load_config()
 
 	def init_ui(self):
 
@@ -53,47 +58,30 @@ class Settings(wx.Dialog):
 		vbox = wx.BoxSizer(wx.VERTICAL)
 
 		# INPUT FOLDER
-		sb = wx.StaticBox(panel, label='Input folder')
+		sb = wx.StaticBox(panel, label='Input Files')
 		sbs = wx.StaticBoxSizer(sb, orient=wx.VERTICAL)
 
-		hbox = wx.BoxSizer(wx.HORIZONTAL)
-		self.input_folder = wx.TextCtrl(panel, value=self.input_folder_value, size=(250, -1))
-		hbox.Add(self.input_folder, flag=wx.LEFT | wx.TOP | wx.EXPAND, border=5)
+		hbox = wx.BoxSizer(wx.VERTICAL)
 
-		browse_button = BrowseFolderButton(panel, label="Browse...")
-		browse_button.target = self.input_folder
-		hbox.Add(browse_button, flag=wx.LEFT | wx.TOP | wx.RIGHT, border=5)
+		# list
+		self.input_list = wx.ListCtrl(panel, size=(-1, 130), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
+		self.input_list.InsertColumn(0, 'Folder', width=100)
+		self.input_list.InsertColumn(1, 'Filename', width=200)
+
+		hbox.Add(self.input_list, flag=wx.LEFT | wx.TOP | wx.RIGHT, border=5)
+
+		hbox2 = wx.BoxSizer(wx.HORIZONTAL)
+		btn_add = BrowseFileButton(panel, label="+", size=(30, -1))
+		btn_rem = wx.Button(panel, label="-", size=(30, -1))
+		btn_add.target = self.add_line
+		btn_rem.Bind(wx.EVT_BUTTON, self.rem_line)
+		hbox2.Add(btn_add, flag=wx.RIGHT, border=0)
+		hbox2.Add(btn_rem, flag=wx.LEFT, border=0)
+
+		hbox.Add(hbox2, flag=wx.ALIGN_LEFT | wx.BOTTOM | wx.LEFT, border=5)
 
 		sbs.Add(hbox)
 		vbox.Add(sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
-
-		# # LISTBOX
-		# sb = wx.StaticBox(panel, label='Columns')
-		# sbs = wx.StaticBoxSizer(sb, orient=wx.VERTICAL)
-
-		# self.list_box = wx.ListBox(
-		# 	choices=[],
-		# 	name='listBox',
-		# 	parent=panel,
-		# 	pos=wx.Point(8, 48),
-		# 	size=wx.Size(184, 256),
-		# 	style=0)
-
-		# self.list_box.Append("Andreas")
-		# self.list_box.Append("Erich")
-
-		# sbs.Add(self.list_box)
-
-		# vbox.Add(sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
-
-		# # BUTTON BOX
-		# hbox2 = wx.BoxSizer(wx.HORIZONTAL)
-		# add_button = wx.Button(panel, label='Add')
-		# remove_button = wx.Button(panel, label='Remove')
-		# hbox2.Add(add_button, proportion=1, flag=wx.RIGHT, border=5)
-		# hbox2.Add(remove_button, proportion=1, flag=wx.LEFT, border=5)
-
-		# vbox.Add(hbox2, flag=wx.ALIGN_CENTER | wx.BOTTOM, border=10)
 
 		# BUTTON BOX
 		hbox2 = wx.BoxSizer(wx.HORIZONTAL)
@@ -109,21 +97,50 @@ class Settings(wx.Dialog):
 		ok_button.Bind(wx.EVT_BUTTON, self.on_save)
 		close_button.Bind(wx.EVT_BUTTON, self.on_close)
 
+	def add_line(self, path):
+		folder = "/".join(path.split('/')[:-1])
+		filename = "/".join(path.split('/')[-1:])
+		self.input_list.InsertStringItem(self.input_list_index, folder)
+		self.input_list.SetStringItem(self.input_list_index, 1, filename)
+		self.input_list_index += 1
+
+	def rem_line(self, event):
+		selected_count = self.input_list.GetSelectedItemCount()
+		selected_index = self.input_list.GetFocusedItem()
+		if selected_count == 1 and selected_index != -1:
+			self.input_list.Focus(0)
+			self.input_list.DeleteItem(selected_index)
+			self.input_list_index -= 1
+		else:
+			wx.MessageBox("", 'No selected file to delete', wx.ICON_EXCLAMATION)
+
 	def load_config(self):
 		print('Loading config data...')
 		config = SafeConfigParser()
 		config.read('config.ini')
 
-		self.input_folder_value = config.get('main', 'input_folder')
+		try:
+			input_files = json.loads(config.get('main', 'input_files'))
+			for file in input_files:
+				self.add_line(file[0] + "/" + file[1])
+		except NoOptionError as er:
+			print(er)
 
 	def on_close(self, e):
 		self.Close(True)
 
 	def on_save(self, e):
+		input_files = []
+		count = self.input_list.GetItemCount()
+		for row in range(count):
+			folder = self.input_list.GetItem(itemId=row, col=0).GetText()
+			filename = self.input_list.GetItem(itemId=row, col=1).GetText()
+			input_files.append([folder, filename])
+
 		print('Saving config data...')
 		config = SafeConfigParser()
 		config.add_section('main')
-		config.set('main', 'input_folder', self.input_folder.GetValue())
+		config.set('main', 'input_files', json.dumps(input_files))
 
 		with open('config.ini', 'w') as f:
 			config.write(f)
@@ -136,7 +153,6 @@ class Interface(wx.Frame):
 		super(Interface, self).__init__(parent, title=title, size=(570, 100))
 
 		self.header = None
-		self.input_folder_value = ''
 		self.plot_panels = {}
 		self.current_input = 0
 		self.monitors = []
@@ -160,14 +176,8 @@ class Interface(wx.Frame):
 		w, h = self.GetClientSize()
 		self.SetSize((w, h + len(self.attributes) * (199)))
 
-		self.load_config()
-
 		self.input_files = []
-		if self.input_folder_value is not '':
-			self.input_files = self.get_input_files(self.input_folder_value)
-			print self.input_files
-		else:
-			print 'ERROR: no input folder defined'
+		self.load_config()
 
 		if self.input_files:
 			self.init_ui(self.input_files[self.current_input])
@@ -195,7 +205,14 @@ class Interface(wx.Frame):
 		config = SafeConfigParser()
 		config.read('config.ini')
 
-		self.input_folder_value = config.get('main', 'input_folder')
+		try:
+			self.input_files = []
+			input_files = json.loads(config.get('main', 'input_files'))
+			for n in input_files:
+				self.input_files.append(n[0] + "/" + n[1])
+
+		except NoOptionError as er:
+			print(er)
 
 	def get_input_files(self, path):
 		files = []
@@ -215,9 +232,6 @@ class Interface(wx.Frame):
 	def init_ui(self, input):
 		self.panel = wx.Panel(self)
 		sizer = wx.GridBagSizer(len(self.attributes) + 1, 4)
-
-		# for input in inputs:
-		# 	self.plot_panels[input] = PlotPanel(panel)
 
 		for attribute in self.attributes:
 			self.plot_panels[attribute] = PlotPanel(self.panel)
@@ -297,7 +311,7 @@ class Interface(wx.Frame):
 	def restart(self):
 		global do_restart
 
-		print '\nRestarting...\n\n'
+		print('\nRestarting...\n\n')
 
 		do_restart = True
 		self.close_window(None)
@@ -394,8 +408,8 @@ class Monitor:
 						break
 
 				if not valid:
-					self.update_title("Problem with reading some content!")
-					print "Thread: breaking!"
+					self.update_title('Problem with reading some content!')
+					print('Thread: breaking!')
 					break
 
 				# redraw the plot with the last X values
@@ -408,7 +422,7 @@ class Monitor:
 				pass
 				# print line
 
-		print "Thread: Terminated"
+		print('Thread: Terminated')
 
 	def run(self):
 		self.alive = True
