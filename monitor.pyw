@@ -1,3 +1,5 @@
+#!/usr/bin/env pythonw
+
 import wx
 import os
 import time

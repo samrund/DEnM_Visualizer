@@ -1,5 +1,2 @@
 *.ini
-*.pyc
-*.xls
 *.txt
-test.py
