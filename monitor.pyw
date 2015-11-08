@@ -8,6 +8,7 @@ import json
 from time import strftime
 from threading import Thread
 from ConfigParser import SafeConfigParser, NoOptionError, NoSectionError
+from wx.lib.masked import NumCtrl
 
 import matplotlib as mpl
 mpl.use('WXAgg')
@@ -19,7 +20,9 @@ class Config():
 
 	config_filename = 'config.ini'
 	config_section = 'main'
-	config_target = 'input_files'
+	config_target_input = 'input_files'
+	config_target_minutes = 'minutes'
+	minutes_default = 120
 
 	@staticmethod
 	def get_config_path():
@@ -39,26 +42,34 @@ class Config():
 		config, full_path = Config.get_config_path()
 		print('Loading config file: %s' % (full_path))
 
-		input_files = []
+		obj = {
+			'input_files': [],
+			'minutes': Config.minutes_default
+		}
+
 		try:
 			config.read(full_path)
-			input_files_json = json.loads(config.get(Config.config_section, Config.config_target))
+			input_files_json = json.loads(config.get(Config.config_section, Config.config_target_input))
 			for n in input_files_json:
-				input_files.append(n[0] + '/' + n[1])
-
+				obj['input_files'].append(n[0] + '/' + n[1])
 		except (NoOptionError, NoSectionError) as er:
 			print(er)
-			return []
 
-		return input_files
+		try:
+			obj['minutes'] = json.loads(config.get(Config.config_section, Config.config_target_minutes))
+		except (NoOptionError, NoSectionError) as er:
+			print(er)
+
+		return obj
 
 	@staticmethod
-	def save(data):
+	def save(input_files, minutes):
 		config, full_path = Config.get_config_path()
 		print('Saving config data: %s' % (full_path))
 
 		config.add_section(Config.config_section)
-		config.set(Config.config_section, Config.config_target, json.dumps(data))
+		config.set(Config.config_section, Config.config_target_input, json.dumps(input_files))
+		config.set(Config.config_section, Config.config_target_minutes, json.dumps(minutes))
 
 		with open(full_path, 'w') as f:
 			config.write(f)
@@ -96,7 +107,7 @@ class Settings(wx.Dialog):
 		self.input_list_index = 0
 
 		self.init_ui()
-		self.SetSize((400, 270))
+		self.SetSize((400, 330))
 		self.SetTitle('Settings')
 
 		self.load_config()
@@ -106,7 +117,7 @@ class Settings(wx.Dialog):
 		panel = wx.Panel(self)
 		vbox = wx.BoxSizer(wx.VERTICAL)
 
-		# INPUT FOLDER
+		# ## INPUT FOLDER
 		sb = wx.StaticBox(panel, label='Input Files')
 		sbs = wx.StaticBoxSizer(sb, orient=wx.VERTICAL)
 
@@ -132,7 +143,24 @@ class Settings(wx.Dialog):
 		sbs.Add(hbox)
 		vbox.Add(sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
 
-		# BUTTON BOX
+		# ## MINUTES
+		min_sb = wx.StaticBox(panel, label='Measured time range')
+		min_sbs = wx.StaticBoxSizer(min_sb, orient=wx.VERTICAL)
+		min_sb.SetMinSize((340, -1))
+
+		min_hbox = wx.BoxSizer(wx.HORIZONTAL)
+
+		self.measured_minutes = NumCtrl(panel, -1, value=0)
+		self.measured_minutes.SetMin(0)
+		min_hbox.Add(self.measured_minutes, flag=wx.LEFT, border=0)
+
+		txt = wx.StaticText(panel, label="minutes")
+		min_hbox.Add(txt, flag=wx.LEFT, border=10)
+
+		min_sbs.Add(min_hbox)
+		vbox.Add(min_sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
+
+		# ## BUTTON BOX
 		hbox2 = wx.BoxSizer(wx.HORIZONTAL)
 		ok_button = wx.Button(panel, label='Ok')
 		close_button = wx.Button(panel, label='Close')
@@ -164,8 +192,12 @@ class Settings(wx.Dialog):
 			wx.MessageBox('', 'No selected file to delete', wx.ICON_EXCLAMATION)
 
 	def load_config(self):
-		for n in Config.load():
+		loaded_data = Config.load()
+		for n in loaded_data['input_files']:
 			self.add_line(n)
+
+		if loaded_data['minutes']:
+			self.measured_minutes.SetValue(loaded_data['minutes'])
 
 	def on_close(self, e):
 		self.Close(True)
@@ -178,7 +210,9 @@ class Settings(wx.Dialog):
 			filename = self.input_list.GetItem(itemId=row, col=1).GetText()
 			input_files.append([folder, filename])
 
-		Config.save(input_files)
+		measured_minutes = self.measured_minutes.GetValue()
+
+		Config.save(input_files=input_files, minutes=measured_minutes)
 		self.Close(True)
 		self.parent.restart()
 
@@ -211,9 +245,7 @@ class Interface(wx.Frame):
 		w, h = self.GetClientSize()
 		self.SetSize((w, h + len(self.attributes) * (199)))
 
-		self.input_files = []
-		for n in Config.load():
-			self.input_files.append(n)
+		self.load_config()
 
 		if self.input_files:
 			self.init_ui(self.input_files[self.current_input])
@@ -224,6 +256,15 @@ class Interface(wx.Frame):
 		self.Show()
 		self.load_input(self.current_input)
 
+	def load_config(self):
+		self.input_files = []
+		loaded_data = Config.load()
+
+		for n in loaded_data['input_files']:
+			self.input_files.append(n)
+
+		self.minutes = loaded_data['minutes']
+
 	def load_input(self, target_input):
 		self.monitors_terminate()
 
@@ -233,7 +274,7 @@ class Interface(wx.Frame):
 			self.current_filename.SetLabel(self.get_formatted_filename_from_path(self.input_files[target_input]))
 			self.panel.Layout()
 
-			self.monitors.append(Monitor(self.update_title, self.input_files[target_input], self.plot_panels, self.attributes))
+			self.monitors.append(Monitor(self.update_title, self.input_files[target_input], self.plot_panels, self.attributes, self.minutes))
 			self.monitors_start()
 
 	def get_input_files(self, path):
@@ -363,7 +404,6 @@ class PlotPanel(wx.Panel):
 		sizer = wx.BoxSizer(wx.VERTICAL)
 		sizer.Add(self.canvas, 1, wx.EXPAND)
 		self.SetSizer(sizer)
-		# sizer.SetMinSize((500, 130))
 		self.sizer = sizer
 
 	def draw(self, vals, label='', label_x='', label_y=''):
@@ -373,19 +413,27 @@ class PlotPanel(wx.Panel):
 		axes.set_xlabel(label_x)
 		axes.set_ylabel(label_y)
 		axes.set_title(label)
+		plot_style = self.get_plot_style(len(vals))
 		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
-		axes.plot(list(reversed(range(len(vals)))), vals, '-o', color='r', label='r')
+		axes.plot(list(reversed(range(len(vals)))), vals, plot_style, color='r', label='r')
 		self.canvas.draw()
+
+	def get_plot_style(self, length):
+		if length > 240:
+			return 'b-'
+		else:
+			return 'o-'
 
 class Monitor:
 
-	def __init__(self, update_title, filename, plot_panels, attributes):
+	def __init__(self, update_title, filename, plot_panels, attributes, minutes):
 		self.filename = filename
 		self.plot_panel = plot_panels
 		self.vals = {}
 		self.update_title = update_title
 		self.alive = True
 		self.delay_in_seconds = 1
+		self.minutes = minutes
 
 		self.attributes = attributes
 		for attribute in attributes:
@@ -434,7 +482,7 @@ class Monitor:
 
 					# redraw the plot with the last X values
 					for attribute in self.attributes:
-						self.plot_panel[attribute].draw(self.vals[attribute][-120:], attribute, 'minutes', self.attributes[attribute]['unit'])
+						self.plot_panel[attribute].draw(self.vals[attribute][-self.minutes:], attribute, 'minutes', self.attributes[attribute]['unit'])
 
 					time.sleep(self.delay_in_seconds)
 					self.content_file.seek(where)
