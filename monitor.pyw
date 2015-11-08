@@ -413,6 +413,8 @@ class PlotPanel(wx.Panel):
 		axes.set_xlabel(label_x)
 		axes.set_ylabel(label_y)
 		axes.set_title(label)
+		axes.set_xlim([len(vals), 0])
+		axes.set_ylim(self.get_ylim(vals))
 		plot_style = self.get_plot_style(len(vals))
 		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
 		axes.plot(list(reversed(range(len(vals)))), vals, plot_style, color='r', label='r')
@@ -423,6 +425,11 @@ class PlotPanel(wx.Panel):
 			return 'b-'
 		else:
 			return 'o-'
+
+	def get_ylim(self, vals):
+		lo = min(vals) - 10
+		hi = max(vals) + 10
+		return [lo, hi]
 
 class Monitor:
 
