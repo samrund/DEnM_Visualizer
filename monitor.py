@@ -5,14 +5,61 @@ import json
 
 from time import strftime
 from threading import Thread
-from ConfigParser import SafeConfigParser, NoOptionError
+from ConfigParser import SafeConfigParser, NoOptionError, NoSectionError
 
 import matplotlib as mpl
 mpl.use('WXAgg')
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
 
-
 do_restart = False
+
+class Config():
+
+	config_filename = 'config.ini'
+	config_section = 'main'
+	config_target = 'input_files'
+
+	@staticmethod
+	def get_config_path():
+		config = SafeConfigParser()
+
+		path, fl = os.path.split(os.path.realpath(__file__))
+		full_path = os.path.join(path, Config.config_filename)
+
+		if not os.path.isfile(full_path):
+			open(full_path, 'a').close()
+			print('WARNING: No config file found! New config file was created.')
+
+		return (config, full_path)
+
+	@staticmethod
+	def load():
+		config, full_path = Config.get_config_path()
+		print('Loading config file: %s' % (full_path))
+
+		input_files = []
+		try:
+			config.read(full_path)
+			input_files_json = json.loads(config.get(Config.config_section, Config.config_target))
+			for n in input_files_json:
+				input_files.append(n[0] + '/' + n[1])
+
+		except (NoOptionError, NoSectionError) as er:
+			print(er)
+			return []
+
+		return input_files
+
+	@staticmethod
+	def save(data):
+		config, full_path = Config.get_config_path()
+		print('Saving config data: %s' % (full_path))
+
+		config.add_section(Config.config_section)
+		config.set(Config.config_section, Config.config_target, json.dumps(data))
+
+		with open(full_path, 'w') as f:
+			config.write(f)
 
 class BrowseFileButton(wx.Button):
 
@@ -48,7 +95,7 @@ class Settings(wx.Dialog):
 
 		self.init_ui()
 		self.SetSize((400, 270))
-		self.SetTitle("Settings")
+		self.SetTitle('Settings')
 
 		self.load_config()
 
@@ -71,8 +118,8 @@ class Settings(wx.Dialog):
 		hbox.Add(self.input_list, flag=wx.LEFT | wx.TOP | wx.RIGHT, border=5)
 
 		hbox2 = wx.BoxSizer(wx.HORIZONTAL)
-		btn_add = BrowseFileButton(panel, label="+", size=(30, -1))
-		btn_rem = wx.Button(panel, label="-", size=(30, -1))
+		btn_add = BrowseFileButton(panel, label='+', size=(30, -1))
+		btn_rem = wx.Button(panel, label='-', size=(30, -1))
 		btn_add.target = self.add_line
 		btn_rem.Bind(wx.EVT_BUTTON, self.rem_line)
 		hbox2.Add(btn_add, flag=wx.RIGHT, border=0)
@@ -98,8 +145,8 @@ class Settings(wx.Dialog):
 		close_button.Bind(wx.EVT_BUTTON, self.on_close)
 
 	def add_line(self, path):
-		folder = "/".join(path.split('/')[:-1])
-		filename = "/".join(path.split('/')[-1:])
+		folder = '/'.join(path.split('/')[:-1])
+		filename = '/'.join(path.split('/')[-1:])
 		self.input_list.InsertStringItem(self.input_list_index, folder)
 		self.input_list.SetStringItem(self.input_list_index, 1, filename)
 		self.input_list_index += 1
@@ -112,19 +159,11 @@ class Settings(wx.Dialog):
 			self.input_list.DeleteItem(selected_index)
 			self.input_list_index -= 1
 		else:
-			wx.MessageBox("", 'No selected file to delete', wx.ICON_EXCLAMATION)
+			wx.MessageBox('', 'No selected file to delete', wx.ICON_EXCLAMATION)
 
 	def load_config(self):
-		print('Loading config data...')
-		config = SafeConfigParser()
-		config.read('config.ini')
-
-		try:
-			input_files = json.loads(config.get('main', 'input_files'))
-			for file in input_files:
-				self.add_line(file[0] + "/" + file[1])
-		except NoOptionError as er:
-			print(er)
+		for n in Config.load():
+			self.add_line(n)
 
 	def on_close(self, e):
 		self.Close(True)
@@ -137,13 +176,7 @@ class Settings(wx.Dialog):
 			filename = self.input_list.GetItem(itemId=row, col=1).GetText()
 			input_files.append([folder, filename])
 
-		print('Saving config data...')
-		config = SafeConfigParser()
-		config.add_section('main')
-		config.set('main', 'input_files', json.dumps(input_files))
-
-		with open('config.ini', 'w') as f:
-			config.write(f)
+		Config.save(input_files)
 		self.Close(True)
 		self.parent.restart()
 
@@ -177,7 +210,8 @@ class Interface(wx.Frame):
 		self.SetSize((w, h + len(self.attributes) * (199)))
 
 		self.input_files = []
-		self.load_config()
+		for n in Config.load():
+			self.input_files.append(n)
 
 		if self.input_files:
 			self.init_ui(self.input_files[self.current_input])
@@ -200,25 +234,11 @@ class Interface(wx.Frame):
 			self.monitors.append(Monitor(self.update_title, self.input_files[target_input], self.plot_panels, self.attributes))
 			self.monitors_start()
 
-	def load_config(self):
-		print('Loading config data...')
-		config = SafeConfigParser()
-		config.read('config.ini')
-
-		try:
-			self.input_files = []
-			input_files = json.loads(config.get('main', 'input_files'))
-			for n in input_files:
-				self.input_files.append(n[0] + "/" + n[1])
-
-		except NoOptionError as er:
-			print(er)
-
 	def get_input_files(self, path):
 		files = []
 		for file in sorted(os.listdir(path)):
-			if file.endswith(".txt"):
-				files.append(path + "/" + file)
+			if file.endswith('.txt'):
+				files.append(path + '/' + file)
 
 		return files
 
@@ -260,19 +280,19 @@ class Interface(wx.Frame):
 
 		# BLOCK 2
 		# #######
-		button_cancel = wx.Button(self.panel, label="Exit")
+		button_cancel = wx.Button(self.panel, label='Exit')
 		button_cancel.Bind(wx.EVT_BUTTON, self.close_window)
 		sizer.Add(button_cancel, pos=(1 + len(self.attributes), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
 
-		button_start = wx.Button(self.panel, label="<")
+		button_start = wx.Button(self.panel, label='<')
 		button_start.Bind(wx.EVT_BUTTON, self.change_input_backward)
 		sizer.Add(button_start, pos=(1 + len(self.attributes), 1), flag=wx.LEFT | wx.ALIGN_RIGHT, border=100)
 
-		button_start = wx.Button(self.panel, label=">")
+		button_start = wx.Button(self.panel, label='>')
 		button_start.Bind(wx.EVT_BUTTON, self.change_input_forward)
 		sizer.Add(button_start, pos=(1 + len(self.attributes), 2), flag=wx.ALIGN_LEFT, border=5)
 
-		button_start = wx.Button(self.panel, label="Settings")
+		button_start = wx.Button(self.panel, label='Settings')
 		button_start.Bind(wx.EVT_BUTTON, self.show_settings)
 		sizer.Add(button_start, pos=(1 + len(self.attributes), 3), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
 
@@ -302,7 +322,6 @@ class Interface(wx.Frame):
 			self.header.SetLabel(str(text))
 		else:
 			actual_time = strftime("%H:%M:%S")
-			print('Last time of recording: ' + str(actual_time))
 			self.header.SetLabel('Last time of recording: ' + str(actual_time))
 
 	def close_window(self, event):
@@ -311,7 +330,7 @@ class Interface(wx.Frame):
 	def restart(self):
 		global do_restart
 
-		print('\nRestarting...\n\n')
+		print('Restarting...\n')
 
 		do_restart = True
 		self.close_window(None)
@@ -328,6 +347,7 @@ class Interface(wx.Frame):
 
 
 class PlotPanel(wx.Panel):
+
 	def __init__(self, parent, id=-1, dpi=80, **kwargs):
 		wx.Panel.__init__(self, parent, id=id, **kwargs)
 		self.figure = mpl.figure.Figure(dpi=dpi, figsize=(7, 2.3))
@@ -352,10 +372,11 @@ class PlotPanel(wx.Panel):
 		axes.set_ylabel(label_y)
 		axes.set_title(label)
 		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
-		axes.plot(list(reversed(range(len(vals)))), vals, "-o", color='r', label='r')
+		axes.plot(list(reversed(range(len(vals)))), vals, '-o', color='r', label='r')
 		self.canvas.draw()
 
 class Monitor:
+
 	def __init__(self, update_title, filename, plot_panels, attributes):
 		self.filename = filename
 		self.plot_panel = plot_panels
@@ -391,36 +412,32 @@ class Monitor:
 
 				if reached_end:
 					self.update_title()
-			except:
-				pass
 
-			if not line:
-				if not reached_end:
-					reached_end = True
-					self.update_title()
+				if not line:
+					if not reached_end:
+						reached_end = True
+						self.update_title()
 
-				# Check for erroneous input
-				#
-				valid = True
-				for attribute in self.attributes:
-					if not self.vals[attribute]:
-						valid = False
+					# Check for erroneous input
+					valid = True
+					for attribute in self.attributes:
+						if not self.vals[attribute]:
+							valid = False
+							break
+
+					if not valid:
+						self.update_title('Problem with reading some content!')
+						print('Thread: breaking!')
 						break
 
-				if not valid:
-					self.update_title('Problem with reading some content!')
-					print('Thread: breaking!')
-					break
+					# redraw the plot with the last X values
+					for attribute in self.attributes:
+						self.plot_panel[attribute].draw(self.vals[attribute][-120:], attribute, 'minutes', self.attributes[attribute]['unit'])
 
-				# redraw the plot with the last X values
-				for attribute in self.attributes:
-					self.plot_panel[attribute].draw(self.vals[attribute][-120:], attribute, "minutes", self.attributes[attribute]['unit'])
-
-				time.sleep(self.delay_in_seconds)
-				self.content_file.seek(where)
-			else:
+					time.sleep(self.delay_in_seconds)
+					self.content_file.seek(where)
+			except:
 				pass
-				# print line
 
 		print('Thread: Terminated')
 
