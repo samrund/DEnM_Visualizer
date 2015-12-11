@@ -3,9 +3,11 @@
 # error output for windows
 import sys
 PATH_SEPARATOR = '/'
+WINDOW_SIZE_ADJUST = 0
 if sys.platform == 'win32':
 	sys.stderr = open("errlog.txt", "w")
 	PATH_SEPARATOR = '\\'
+	WINDOW_SIZE_ADJUST = 35
 
 import wx
 import os
@@ -226,7 +228,7 @@ class Settings(wx.Dialog):
 class Interface(wx.Frame):
 
 	def __init__(self, parent, title):
-		super(Interface, self).__init__(parent, title=title, size=(570, 100))
+		super(Interface, self).__init__(parent, title=title, size=(570 + WINDOW_SIZE_ADJUST, 100 + WINDOW_SIZE_ADJUST))
 
 		self.header = None
 		self.plot_panels = {}
