@@ -2,8 +2,10 @@
 
 # error output for windows
 import sys
+PATH_SEPARATOR = '/'
 if sys.platform == 'win32':
 	sys.stderr = open("errlog.txt", "w")
+	PATH_SEPARATOR = '\\'
 
 import wx
 import os
@@ -56,7 +58,7 @@ class Config():
 			config.read(full_path)
 			input_files_json = json.loads(config.get(Config.config_section, Config.config_target_input))
 			for n in input_files_json:
-				obj['input_files'].append(n[0] + '/' + n[1])
+				obj['input_files'].append(n[0] + PATH_SEPARATOR + n[1])
 		except (NoOptionError, NoSectionError) as er:
 			print(er)
 
@@ -84,7 +86,7 @@ class BrowseFileButton(wx.Button):
 	def __init__(self, *args, **kw):
 		super(BrowseFileButton, self).__init__(*args, **kw)
 
-		self._defaultDirectory = '/'
+		self._defaultDirectory = PATH_SEPARATOR
 		self.target = None
 		self.Bind(wx.EVT_BUTTON, self.on_botton_clicked)
 
@@ -180,8 +182,8 @@ class Settings(wx.Dialog):
 		close_button.Bind(wx.EVT_BUTTON, self.on_close)
 
 	def add_line(self, path):
-		folder = '/'.join(path.split('/')[:-1])
-		filename = '/'.join(path.split('/')[-1:])
+		folder = PATH_SEPARATOR.join(path.split(PATH_SEPARATOR)[:-1])
+		filename = PATH_SEPARATOR.join(path.split(PATH_SEPARATOR)[-1:])
 		self.input_list.InsertStringItem(self.input_list_index, folder)
 		self.input_list.SetStringItem(self.input_list_index, 1, filename)
 		self.input_list_index += 1
@@ -286,14 +288,14 @@ class Interface(wx.Frame):
 		files = []
 		for file in sorted(os.listdir(path)):
 			if file.endswith('.txt'):
-				files.append(path + '/' + file)
+				files.append(path + PATH_SEPARATOR + file)
 
 		return files
 
 	def get_formatted_filename_from_path(self, path):
 		if path:
 			appendix = ' (' + str(self.current_input + 1) + '/' + str(len(self.input_files)) + ')'
-			return path.split('/')[-1:][0] + appendix
+			return path.split(PATH_SEPARATOR)[-1:][0] + appendix
 
 		return '<Error>'
 
