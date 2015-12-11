@@ -1,5 +1,10 @@
 #!/usr/bin/env pythonw
 
+# error output for windows
+import sys
+if sys.platform == 'win32':
+	sys.stderr = open("errlog.txt", "w")
+
 import wx
 import os
 import time
