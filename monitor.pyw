@@ -313,7 +313,7 @@ class Interface(wx.Frame):
 
 		self.header = None
 		if not input:
-			self.header = wx.StaticText(self.panel, wx.ID_ANY, label='No input files found. Please change the input folder in Settings.')
+			self.header = wx.StaticText(self.panel, wx.ID_ANY, label='No input files found. Please add the input files by clicking on Settings.')
 			sizer.Add(self.header, pos=(0, 0), span=(1, 3), flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
 		else:
 			self.header = wx.StaticText(self.panel, wx.ID_ANY, label='Loading data...')
