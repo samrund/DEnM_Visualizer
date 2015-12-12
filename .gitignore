@@ -1,3 +1,8 @@
+
+dist/
+build/
+DEnM_Visualizer.egg-info/
+
 *.ini
 *.txt
 

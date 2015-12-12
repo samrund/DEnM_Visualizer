@@ -519,7 +519,7 @@ def main():
 	app = wx.App()
 
 	while True:
-		Interface(None, title='Monitors')
+		Interface(None, title='DEnM_Visualizer')
 		app.MainLoop()
 
 		if not do_restart:
