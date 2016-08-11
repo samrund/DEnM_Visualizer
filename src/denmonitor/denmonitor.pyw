@@ -16,7 +16,7 @@ import json
 
 from time import strftime
 from threading import Thread
-from ConfigParser import SafeConfigParser, NoOptionError, NoSectionError
+from configparser import SafeConfigParser, NoOptionError, NoSectionError
 from wx.lib.masked import NumCtrl
 
 import matplotlib as mpl
@@ -49,7 +49,7 @@ class Config():
 	@staticmethod
 	def load():
 		config, full_path = Config.get_config_path()
-		print('Loading config file: %s' % (full_path))
+		print(('Loading config file: %s' % (full_path)))
 
 		obj = {
 			'input_files': [],
@@ -74,7 +74,7 @@ class Config():
 	@staticmethod
 	def save(input_files, minutes):
 		config, full_path = Config.get_config_path()
-		print('Saving config data: %s' % (full_path))
+		print(('Saving config data: %s' % (full_path)))
 
 		config.add_section(Config.config_section)
 		config.set(Config.config_section, Config.config_target_input, json.dumps(input_files))
@@ -426,7 +426,7 @@ class PlotPanel(wx.Panel):
 		axes.set_ylim(self.get_ylim(vals))
 		plot_style = self.get_plot_style(len(vals))
 		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
-		axes.plot(list(reversed(range(len(vals)))), vals, plot_style, color='r', label='r')
+		axes.plot(list(reversed(list(range(len(vals))))), vals, plot_style, color='r', label='r')
 		self.canvas.draw()
 
 	def get_plot_style(self, length):
