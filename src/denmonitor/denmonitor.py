@@ -18,11 +18,22 @@ mpl.use('TkAgg')
 
 from time import strftime
 from threading import Thread
-from configparser import SafeConfigParser, NoOptionError, NoSectionError
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-import tkinter as tk
-import tkinter.ttk as ttk
+# import with python 2 compatibility
+try:
+    from configparser import SafeConfigParser, NoOptionError, NoSectionError
+except ImportError:
+    from ConfigParser import SafeConfigParser, NoOptionError, NoSectionError
+
+try:
+    import tkinter as tk
+    import tkinter.ttk as ttk
+    import tkinter.filedialog as filedialog
+except ImportError:
+    import Tkinter as tk
+    import ttk
+    import tkFileDialog as filedialog
 
 do_restart = False
 
@@ -75,7 +86,7 @@ class SettingsDialog(tk.Toplevel):
         self.pathtree.grid(row=0, column=0)
 
         def browse_file():
-            file_path = tk.filedialog.askopenfilename()
+            file_path = filedialog.askopenfilename()
             if file_path:
                 self.add_line(file_path)
 
@@ -216,7 +227,7 @@ class Config():
 
 class Application(tk.Frame):
     def __init__(self, master=None):
-        super().__init__(master)
+        tk.Frame.__init__(self, master)
         self.master = master
         self.header = None
         self.plot_panels = {}
