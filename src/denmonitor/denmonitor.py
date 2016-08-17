@@ -3,11 +3,8 @@
 # error output for windows
 import sys
 PATH_SEPARATOR = '/'
-WINDOW_SIZE_ADJUST = 0
 if sys.platform == 'win32':
     sys.stderr = open("errlog.txt", "w")
-    PATH_SEPARATOR = '\\'
-    WINDOW_SIZE_ADJUST = 35
 
 
 import os
@@ -318,14 +315,14 @@ class Application(tk.Frame):
         # BLOCK 0
         # #######
 
-        self.status_field = tk.Message(root, textvariable=self.status_text, width=300, padx=15)
-        self.status_field.grid(row=0, column=0, sticky=tk.W, columnspan=2)
+        self.status_field = tk.Message(root, textvariable=self.status_text, width=370, padx=15)
+        self.status_field.grid(row=0, column=0, sticky=tk.W, columnspan=1)
 
-        self.filename_field = tk.Message(root, textvariable=self.filename_text, width=200, padx=15)
-        self.filename_field.grid(row=0, column=3, sticky=tk.E, columnspan=2)
+        self.filename_field = tk.Message(root, textvariable=self.filename_text, width=190, padx=15)
+        self.filename_field.grid(row=0, column=1, sticky=tk.E, columnspan=1)
 
         if not filepath:
-            self.set_status('No input files found. Please add the input files by clicking on Settings.')
+            self.set_status('No input files found. Please add files by clicking on Settings.')
         else:
             self.set_status('Loading data...')
 
@@ -340,16 +337,23 @@ class Application(tk.Frame):
         # BLOCK 2
         # #######
 
-        buttons = []
-        buttons.append(tk.Button(root, text="Exit", command=self.quit, width=7))
-        buttons.append(tk.Button(root, text="<", command=self.change_input_backward, width=7))
-        buttons.append(tk.Button(root, text=">", command=self.change_input_forward, width=7))
-        buttons.append(tk.Button(root, text="Settings", command=self.show_settings, width=7))
+        button_frame = tk.Frame(root, width=root.winfo_width(), height=35)
 
-        buttons[0].grid(row=4, column=0, sticky=tk.W, pady=3, padx=5)
-        buttons[1].grid(row=4, column=1, sticky=tk.E, pady=3)
-        buttons[2].grid(row=4, column=2, sticky=tk.W, pady=3)
-        buttons[3].grid(row=4, column=3, sticky=tk.E, pady=3, padx=5)
+        buttons = []
+        buttons.append(tk.Button(button_frame, text="Exit", command=self.quit, width=7))
+        buttons.append(tk.Button(button_frame, text="<", command=self.change_input_backward, width=7))
+        buttons.append(tk.Button(button_frame, text=">", command=self.change_input_forward, width=7))
+        buttons.append(tk.Button(button_frame, text="Settings", command=self.show_settings, width=7))
+
+        buttons[0].grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
+        buttons[1].grid(row=0, column=1, sticky=tk.E, pady=3)
+        buttons[2].grid(row=0, column=2, sticky=tk.W, pady=3)
+        buttons[3].grid(row=0, column=3, sticky=tk.E, pady=3, padx=5)
+
+        button_frame.grid_propagate(False)
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(3, weight=1)
+        button_frame.grid(row=4, column=0, columnspan=2)
 
     def change_input_backward(self):
         self.current_input -= 1
