@@ -20,7 +20,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
 	name='DEnM_Visualizer',
-	version='1.0.2',
+	version='1.1.0',
 	description='TriKinetics Environnemental Monitor visualiser',
 	long_description=long_description,
 	url='https://github.com/samrund/DEnM_Visualizer',
@@ -36,13 +36,15 @@ setup(
 		'License :: OSI Approved :: MIT License',
 		'Programming Language :: Python :: 2',
 		'Programming Language :: Python :: 2.7',
+		'Programming Language :: Python :: 3',
+		'Programming Language :: Python :: 3.5',
 		'Operating System :: MacOS :: MacOS X',
 		'Operating System :: Microsoft :: Windows',
 	],
 	keywords='TriKinetics Monitor visualiser',
 
 	packages=['denmonitor'],
-	install_requires=['wxPython', 'matplotlib'],
+	install_requires=['matplotlib'],
 	package_dir={'denmonitor': 'src/denmonitor'},
 	scripts=['src/denmonitor/denmonitor.pyw'],
 	entry_points={
