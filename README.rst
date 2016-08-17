@@ -16,9 +16,8 @@ Real-time visualization software for the TriKinetics Environmental Monitor (DEnM
 Dependencies
 ------------
 
-- `python 2.7 <https://www.python.org/downloads/>`_
+- `python 2.7 or 3.x <https://www.python.org/downloads/>`_
 - `matplotlib <http://matplotlib.org/users/installing.html>`_
-- `wxPython <http://www.wxpython.org/download.php>`_
 
 Installation on Mac OS X
 ------------------------
@@ -31,22 +30,11 @@ One convenient way to install *matplotlib* with other useful Python software is 
 - `Anaconda <https://store.continuum.io/cshop/anaconda/>`_ from Continuum Analytics
 - `Canopy <https://enthought.com/products/canopy/>`_ from Enthought
 
-If you are using recent Python 2.7 from `<http://www.python.org>`_, Macports or Homebrew, then you can use the standard pip installer to install *matplotlib* binaries in the form of wheels.
+If you are using recent Python 2.7 or Python 3.x from `<http://www.python.org>`_, Macports or Homebrew, then you can use the standard pip installer to install *matplotlib* binaries in the form of wheels.
 
 .. code:: sh
 
    pip install matplotlib
-
-wxPython
-~~~~~~~~
-
-If you are using *Anaconda*, *wxPython* can be installed with
-
-.. code:: sh
-
-   conda install -c https://conda.anaconda.org/anaconda wxpython
-
-For standard Python installations, *wxPython* can be downloaded from `<http://www.wxpython.org/download.php#osx>`_
 
 
 DEnM-Visualizer
