@@ -68,16 +68,6 @@ Otherwise, for standard Python installations, you have to install matplotlib man
 
 In this case, you will also need to install compatible versions of *setuptools*, *numpy*, *python-dateutil*, *pytz*, *pyparsing*, and *cycler* in addition to matplotlib. In case Python 2.7 is not installed for all users (not the default), the Microsoft Visual C++ 2008 redistributable package needs to be installed.
 
-wxpython
-~~~~~~~~
-
-If you are using *Anaconda*, *wxPython* can be installed with
-
-.. code:: sh
-
-   conda install -c https://conda.anaconda.org/anaconda wxpython
-
-For standard Python installations, *wxPython* can be downloaded from `<http://www.wxpython.org/download.php#msw>`_
 
 DEnM-Visualizer
 ~~~~~~~~~~~~~~~
