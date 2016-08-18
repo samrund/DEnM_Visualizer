@@ -1,532 +1,543 @@
-#!/usr/bin/env pythonw
+#!/usr/bin/env python3
 
 # error output for windows
 import sys
 PATH_SEPARATOR = '/'
-WINDOW_SIZE_ADJUST = 0
 if sys.platform == 'win32':
-	sys.stderr = open("errlog.txt", "w")
-	PATH_SEPARATOR = '\\'
-	WINDOW_SIZE_ADJUST = 35
+    sys.stderr = open("errlog.txt", "w")
 
-import wx
+
 import os
-import time
 import json
+import time
+import matplotlib as mpl
+mpl.use('TkAgg')
 
 from time import strftime
 from threading import Thread
-from ConfigParser import SafeConfigParser, NoOptionError, NoSectionError
-from wx.lib.masked import NumCtrl
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-import matplotlib as mpl
-mpl.use('WXAgg')
-from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as Canvas
+# import with python 2 compatibility
+try:
+    from configparser import SafeConfigParser, NoOptionError, NoSectionError
+except ImportError:
+    from ConfigParser import SafeConfigParser, NoOptionError, NoSectionError
+
+try:
+    import tkinter as tk
+    import tkinter.ttk as ttk
+    import tkinter.filedialog as filedialog
+except ImportError:
+    import Tkinter as tk
+    import ttk
+    import tkFileDialog as filedialog
 
 do_restart = False
 
+
+class SettingsDialog(tk.Toplevel):
+
+    def __init__(self, parent, title=None):
+
+        tk.Toplevel.__init__(self, parent.master)
+        self.transient(parent.master)
+
+        if title:
+            self.title(title)
+
+        self.parent = parent
+        self.result = None
+        self.measured_minutes = None
+
+        body = tk.Frame(self)
+        self.initial_focus = self.create_widgets(body)
+        self.load_config()
+        body.pack(padx=10, pady=10)
+
+        self.buttonbox()
+        self.grab_set()
+
+        if not self.initial_focus:
+            self.initial_focus = self
+
+        self.protocol("WM_DELETE_WINDOW", self.cancel)
+        self.geometry("+%d+%d" % (parent.master.winfo_rootx() + 50,
+                                  parent.master.winfo_rooty() + 50))
+
+        self.initial_focus.focus_set()
+        self.wait_window(self)
+
+    def create_widgets(self, root):
+        '''
+        create dialog body
+        '''
+
+        self.pathtree = ttk.Treeview(root)
+        self.pathtree["columns"] = ("folder", "filename")
+        self.pathtree['show'] = 'headings'  # hide first column
+        self.pathtree.heading('#0', text='Directory Structure', anchor=tk.W)
+        self.pathtree.column("folder", stretch=True, width=300)
+        self.pathtree.column("filename")
+        self.pathtree.heading("folder", text="Folder")
+        self.pathtree.heading("filename", text="Filename")
+        self.pathtree.grid(row=0, column=0)
+
+        def browse_file():
+            file_path = filedialog.askopenfilename()
+            if file_path:
+                self.add_line(file_path)
+
+        def remove_file():
+            selection = self.pathtree.selection()
+            if len(selection):
+                selected_item = selection[0]
+                self.pathtree.delete(selected_item)
+
+        button_frame = tk.Frame(root)
+        button_del = tk.Button(button_frame, text="+", command=browse_file, width=5)
+        button_del.pack(side=tk.LEFT)
+        button_del = tk.Button(button_frame, text="-", command=remove_file, width=5)
+        button_del.pack(side=tk.LEFT)
+        button_frame.grid(row=1, column=0, pady=5, sticky=tk.W)
+
+        mtime_frame = tk.Frame(root)
+        front_label = tk.Label(mtime_frame, text="Measured time range is ")
+        label = tk.Label(mtime_frame, text="minutes.")
+        front_label.pack(side=tk.LEFT, pady=10, padx=5)
+        label.pack(side=tk.RIGHT, pady=10, padx=5)
+        self.measured_minutes = tk.Entry(mtime_frame, relief=tk.RIDGE)
+        self.measured_minutes.pack(side=tk.RIGHT, pady=10, padx=2)
+        mtime_frame.grid(row=2, column=0, pady=10, sticky=tk.W)
+
+    def buttonbox(self):
+        '''
+        add standard button box
+        '''
+
+        box = tk.Frame(self)
+
+        w = tk.Button(box, text="OK", width=10, command=self.ok, default=tk.ACTIVE)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+        w = tk.Button(box, text="Cancel", width=10, command=self.cancel)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+
+        box.pack(pady=5)
+
+    def load_config(self):
+        loaded_data = Config.load()
+        for n in loaded_data['input_files']:
+            self.add_line(n)
+
+        if self.measured_minutes and 'minutes' in loaded_data and loaded_data['minutes']:
+            self.measured_minutes.delete(0, tk.END)
+            self.measured_minutes.insert(0, loaded_data['minutes'])
+
+    def add_line(self, path):
+        folder = PATH_SEPARATOR.join(path.split(PATH_SEPARATOR)[:-1])
+        filename = PATH_SEPARATOR.join(path.split(PATH_SEPARATOR)[-1:])
+
+        self.pathtree.insert("", 0, values=(folder, filename))
+
+    def ok(self, event=None):
+        self.withdraw()
+        self.update_idletasks()
+        self.save()
+        self.parent.restart()
+
+    def save(self):
+        input_files = []
+        children_ids = self.pathtree.get_children()
+        for child_id in children_ids:
+            values = self.pathtree.item(child_id)['values']
+            input_files.append(values)
+
+        measured_minutes = int(self.measured_minutes.get())
+
+        Config.save(input_files=input_files, minutes=measured_minutes)
+
+    def cancel(self, event=None):
+        '''
+        put focus back to the parent window and destroy this dialog
+        '''
+        self.parent.master.focus_set()
+        self.destroy()
+
+
 class Config():
 
-	config_filename = 'config.ini'
-	config_section = 'main'
-	config_target_input = 'input_files'
-	config_target_minutes = 'minutes'
-	minutes_default = 120
+    config_filename = 'config.ini'
+    config_section = 'main'
+    config_target_input = 'input_files'
+    config_target_minutes = 'minutes'
+    minutes_default = 120
+
+    @staticmethod
+    def get_config_path():
+        config = SafeConfigParser()
+
+        path, fl = os.path.split(os.path.realpath(__file__))
+        full_path = os.path.join(path, Config.config_filename)
+
+        if not os.path.isfile(full_path):
+            open(full_path, 'a').close()
+            print('WARNING: No config file found! New config file was created.')
+
+        return (config, full_path)
+
+    @staticmethod
+    def load():
+        config, full_path = Config.get_config_path()
+        print(('Loading config file: %s' % (full_path)))
+
+        obj = {
+            'input_files': [],
+            'minutes': Config.minutes_default
+        }
+
+        try:
+            config.read(full_path)
+            input_files_json = json.loads(config.get(Config.config_section, Config.config_target_input))
+            for n in input_files_json:
+                obj['input_files'].append(n[0] + PATH_SEPARATOR + n[1])
+        except (NoOptionError, NoSectionError) as er:
+            print(er)
+
+        try:
+            obj['minutes'] = json.loads(config.get(Config.config_section, Config.config_target_minutes))
+        except (NoOptionError, NoSectionError) as er:
+            print(er)
+
+        return obj
+
+    @staticmethod
+    def save(input_files, minutes):
+        config, full_path = Config.get_config_path()
+        print(('Saving config data: %s' % (full_path)))
+
+        config.add_section(Config.config_section)
+        config.set(Config.config_section, Config.config_target_input, json.dumps(input_files))
+        config.set(Config.config_section, Config.config_target_minutes, json.dumps(minutes))
+
+        with open(full_path, 'w') as f:
+            config.write(f)
+
+
+class Application(tk.Frame):
+    def __init__(self, master=None):
+        tk.Frame.__init__(self, master)
+        self.master = master
+        self.header = None
+        self.plot_panels = {}
+        self.current_input = 0
+        self.status_text = tk.StringVar()
+        self.filename_text = tk.StringVar()
+        self.monitors = []
+
+        self.attributes = {
+            'Light': {
+                'order': 1,
+                'col': 10,
+                'unit': 'Lux'
+            },
+            'Humidity': {
+                'order': 2,
+                'col': 20,
+                'unit': 'R.H.'
+            },
+            'Temperature': {
+                'order': 3,
+                'col': 15,
+                'unit': 'Celsius',
+                'function': 'x * 0.1'
+            }
+        }
+
+        self.load_config()
+        self.setup_window(master)
+
+        if self.input_files:
+            self.create_widgets(master, self.input_files[self.current_input])
+            self.load_input(self.current_input)
+        else:
+            self.create_widgets(master, None)
+
+    def load_config(self):
+        self.input_files = []
+        loaded_data = Config.load()
+
+        for n in sorted(loaded_data['input_files']):
+            self.input_files.append(n)
+
+        self.minutes = loaded_data['minutes']
 
-	@staticmethod
-	def get_config_path():
-		config = SafeConfigParser()
+    def load_input(self, target_input):
+        def get_formatted_filename_from_path(path):
+            if path:
+                appendix = ' (' + str(self.current_input + 1) + '/' + str(len(self.input_files)) + ')'
+                return path.split(PATH_SEPARATOR)[-1:][0] + appendix
+            return '<Error>'
 
-		path, fl = os.path.split(os.path.realpath(__file__))
-		full_path = os.path.join(path, Config.config_filename)
+        self.monitors_terminate()
+
+        self.monitors = []
+        if self.input_files:
+            self.set_filename(get_formatted_filename_from_path(self.input_files[target_input]))
+            self.monitors.append(Monitor(self.set_status, self.input_files[target_input], self.plot_panels, self.attributes, self.minutes))
+            self.monitors_start()
 
-		if not os.path.isfile(full_path):
-			open(full_path, 'a').close()
-			print('WARNING: No config file found! New config file was created.')
+    def setup_window(self, root, sizex=560, sizey=615):
+        def center(toplevel):
+            toplevel.update_idletasks()
+            w = toplevel.winfo_screenwidth()
+            h = toplevel.winfo_screenheight()
+            size = tuple(int(_) for _ in toplevel.geometry().split('+')[0].split('x'))
+            x = w / 2 - size[0] / 2
+            y = h / 2 - size[1] / 2
+            toplevel.geometry("%dx%d+%d+%d" % (size + (x, y)))
 
-		return (config, full_path)
+        root.wm_title("DEnM_Visualizer")
+        root.resizable(width=False, height=False)
+        root.geometry('{}x{}'.format(sizex, sizey))
+        center(root)
 
-	@staticmethod
-	def load():
-		config, full_path = Config.get_config_path()
-		print('Loading config file: %s' % (full_path))
+    def set_status(self, text=None):
+        if text:
+            self.status_text.set(text)
+        else:
+            actual_time = strftime("%H:%M:%S")
+            self.status_text.set('Last time of recording: ' + str(actual_time))
 
-		obj = {
-			'input_files': [],
-			'minutes': Config.minutes_default
-		}
+    def set_filename(self, text):
+        self.filename_text.set(text)
 
-		try:
-			config.read(full_path)
-			input_files_json = json.loads(config.get(Config.config_section, Config.config_target_input))
-			for n in input_files_json:
-				obj['input_files'].append(n[0] + PATH_SEPARATOR + n[1])
-		except (NoOptionError, NoSectionError) as er:
-			print(er)
+    def create_widgets(self, root, filepath):
 
-		try:
-			obj['minutes'] = json.loads(config.get(Config.config_section, Config.config_target_minutes))
-		except (NoOptionError, NoSectionError) as er:
-			print(er)
+        # BLOCK 0
+        # #######
+
+        self.status_field = tk.Message(root, textvariable=self.status_text, width=370, padx=15)
+        self.status_field.grid(row=0, column=0, sticky=tk.W, columnspan=1)
+
+        self.filename_field = tk.Message(root, textvariable=self.filename_text, width=190, padx=15)
+        self.filename_field.grid(row=0, column=1, sticky=tk.E, columnspan=1)
+
+        if not filepath:
+            self.set_status('No input files found. Please add files by clicking on Settings.')
+        else:
+            self.set_status('Loading data...')
+
+        self.set_filename('No file')
+
+        # BLOCK 1
+        # #######
+
+        for idx, attribute in enumerate(sorted(self.attributes, key=lambda x: int(self.attributes[x]['order']))):
+            self.plot_panels[attribute] = Plotter(root, 1 + idx)
+
+        # BLOCK 2
+        # #######
+
+        button_frame = tk.Frame(root, width=root.winfo_width(), height=35)
+
+        buttons = []
+        buttons.append(tk.Button(button_frame, text="Exit", command=self.quit, width=7))
+        buttons.append(tk.Button(button_frame, text="<", command=self.change_input_backward, width=7))
+        buttons.append(tk.Button(button_frame, text=">", command=self.change_input_forward, width=7))
+        buttons.append(tk.Button(button_frame, text="Settings", command=self.show_settings, width=7))
+
+        buttons[0].grid(row=0, column=0, sticky=tk.W, pady=3, padx=5)
+        buttons[1].grid(row=0, column=1, sticky=tk.E, pady=3)
+        buttons[2].grid(row=0, column=2, sticky=tk.W, pady=3)
+        buttons[3].grid(row=0, column=3, sticky=tk.E, pady=3, padx=5)
+
+        button_frame.grid_propagate(False)
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(3, weight=1)
+        button_frame.grid(row=4, column=0, columnspan=2)
+
+    def change_input_backward(self):
+        self.current_input -= 1
+        if self.current_input < 0:
+            self.current_input = len(self.input_files) - 1
+
+        self.load_input(self.current_input)
+
+    def change_input_forward(self):
+        self.current_input += 1
+        if self.current_input >= len(self.input_files):
+            self.current_input = 0
+
+        self.load_input(self.current_input)
+
+    def show_settings(self):
+        SettingsDialog(self, title="Settings")
+
+    def quit(self):
+        self.monitors_terminate()
+        self.master.destroy()
+
+    def restart(self):
+        global do_restart
+
+        print('Restarting...\n')
+
+        do_restart = True
+        self.quit()
+
+    def monitors_terminate(self):
+        for monitor in self.monitors:
+            monitor.terminate()
+
+    def monitors_start(self):
+        for monitor in self.monitors:
+            thread = Thread(target=monitor.run)
+            thread.daemon = True
+            thread.start()
+
+
+class Plotter():
+
+    def __init__(self, root, row, dpi=80):
+        self.fig = mpl.figure.Figure(dpi=dpi, figsize=(7, 2.3))
+        self.fig.subplots_adjust(top=0.87)
+        self.fig.subplots_adjust(bottom=0.2)
+        self.fig.subplots_adjust(left=0.1)
+        self.fig.subplots_adjust(right=0.92)
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
+        self.canvas.draw()
+        self.canvas._tkcanvas.grid(row=row, column=0, columnspan=4, pady=1)
+
+    def draw(self, vals, label='', label_x='', label_y=''):
+        self.fig.clear()
+        axes = self.fig.gca()
+        axes.invert_xaxis()
+        axes.set_xlabel(label_x)
+        axes.set_ylabel(label_y)
+        axes.set_title(label)
+        axes.set_xlim([len(vals) - 1, 0])
+        axes.set_ylim(self.get_ylim(vals))
+        plot_style = self.get_plot_style(len(vals))
+        if len(vals):
+            axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
+        axes.plot(list(reversed(list(range(len(vals))))), vals, plot_style, color='r', label='r')
+        self.canvas.draw()
+
+    def get_plot_style(self, length):
+        if length > 240:
+            return 'b-'
+        else:
+            return 'o-'
+
+    def get_ylim(self, vals):
+        if not len(vals):
+            return [-1, 1]
+
+        lo = min(vals) - 10
+        hi = max(vals) + 10
+        return [lo, hi]
 
-		return obj
-
-	@staticmethod
-	def save(input_files, minutes):
-		config, full_path = Config.get_config_path()
-		print('Saving config data: %s' % (full_path))
-
-		config.add_section(Config.config_section)
-		config.set(Config.config_section, Config.config_target_input, json.dumps(input_files))
-		config.set(Config.config_section, Config.config_target_minutes, json.dumps(minutes))
-
-		with open(full_path, 'w') as f:
-			config.write(f)
-
-class BrowseFileButton(wx.Button):
-
-	def __init__(self, *args, **kw):
-		super(BrowseFileButton, self).__init__(*args, **kw)
-
-		self._defaultDirectory = PATH_SEPARATOR
-		self.target = None
-		self.Bind(wx.EVT_BUTTON, self.on_botton_clicked)
-
-	def on_botton_clicked(self, e):
-		dialog = wx.FileDialog(
-			self, 'Open TXT file', '', '',
-			'TXT files (*.txt)|*.txt', wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
-
-		if dialog.ShowModal() == wx.ID_OK:
-			if self.target:
-				self.target(dialog.GetPath())
-
-		dialog.Destroy()
-		e.Skip()
-
-class Settings(wx.Dialog):
-
-	def __init__(self, parent):
-		super(Settings, self).__init__(parent)
-
-		self.parent = parent
-		self.input_folder = None
-		self.input_folder_value = ''
-		self.input_list = None
-		self.input_list_index = 0
-
-		self.init_ui()
-		self.SetSize((400, 330))
-		self.SetTitle('Settings')
-
-		self.load_config()
-
-	def init_ui(self):
-
-		panel = wx.Panel(self)
-		vbox = wx.BoxSizer(wx.VERTICAL)
-
-		# ## INPUT FOLDER
-		sb = wx.StaticBox(panel, label='Input Files')
-		sbs = wx.StaticBoxSizer(sb, orient=wx.VERTICAL)
-
-		hbox = wx.BoxSizer(wx.VERTICAL)
-
-		# list
-		self.input_list = wx.ListCtrl(panel, size=(-1, 130), style=wx.LC_REPORT | wx.BORDER_SUNKEN)
-		self.input_list.InsertColumn(0, 'Folder', width=100)
-		self.input_list.InsertColumn(1, 'Filename', width=200)
-
-		hbox.Add(self.input_list, flag=wx.LEFT | wx.TOP | wx.RIGHT, border=5)
-
-		hbox2 = wx.BoxSizer(wx.HORIZONTAL)
-		btn_add = BrowseFileButton(panel, label='+', size=(30, -1))
-		btn_rem = wx.Button(panel, label='-', size=(30, -1))
-		btn_add.target = self.add_line
-		btn_rem.Bind(wx.EVT_BUTTON, self.rem_line)
-		hbox2.Add(btn_add, flag=wx.RIGHT, border=0)
-		hbox2.Add(btn_rem, flag=wx.LEFT, border=0)
-
-		hbox.Add(hbox2, flag=wx.ALIGN_LEFT | wx.BOTTOM | wx.LEFT, border=5)
-
-		sbs.Add(hbox)
-		vbox.Add(sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
-
-		# ## MINUTES
-		min_sb = wx.StaticBox(panel, label='Measured time range')
-		min_sbs = wx.StaticBoxSizer(min_sb, orient=wx.VERTICAL)
-		min_sb.SetMinSize((340, -1))
-
-		min_hbox = wx.BoxSizer(wx.HORIZONTAL)
-
-		self.measured_minutes = NumCtrl(panel, -1, value=0)
-		self.measured_minutes.SetMin(0)
-		min_hbox.Add(self.measured_minutes, flag=wx.LEFT, border=0)
-
-		txt = wx.StaticText(panel, label="minutes")
-		min_hbox.Add(txt, flag=wx.LEFT, border=10)
-
-		min_sbs.Add(min_hbox)
-		vbox.Add(min_sbs, flag=wx.ALIGN_CENTER | wx.TOP, border=10)
-
-		# ## BUTTON BOX
-		hbox2 = wx.BoxSizer(wx.HORIZONTAL)
-		ok_button = wx.Button(panel, label='Ok')
-		close_button = wx.Button(panel, label='Close')
-		hbox2.Add(ok_button, proportion=1, flag=wx.RIGHT, border=0)
-		hbox2.Add(close_button, proportion=1, flag=wx.LEFT, border=0)
-
-		vbox.Add(hbox2, flag=wx.ALIGN_CENTER | wx.TOP | wx.BOTTOM, border=10)
-
-		panel.SetSizer(vbox)
-
-		ok_button.Bind(wx.EVT_BUTTON, self.on_save)
-		close_button.Bind(wx.EVT_BUTTON, self.on_close)
-
-	def add_line(self, path):
-		folder = PATH_SEPARATOR.join(path.split(PATH_SEPARATOR)[:-1])
-		filename = PATH_SEPARATOR.join(path.split(PATH_SEPARATOR)[-1:])
-		self.input_list.InsertStringItem(self.input_list_index, folder)
-		self.input_list.SetStringItem(self.input_list_index, 1, filename)
-		self.input_list_index += 1
-
-	def rem_line(self, event):
-		selected_count = self.input_list.GetSelectedItemCount()
-		selected_index = self.input_list.GetFocusedItem()
-		if selected_count == 1 and selected_index != -1:
-			self.input_list.Focus(0)
-			self.input_list.DeleteItem(selected_index)
-			self.input_list_index -= 1
-		else:
-			wx.MessageBox('', 'No selected file to delete', wx.ICON_EXCLAMATION)
-
-	def load_config(self):
-		loaded_data = Config.load()
-		for n in loaded_data['input_files']:
-			self.add_line(n)
-
-		if loaded_data['minutes']:
-			self.measured_minutes.SetValue(loaded_data['minutes'])
-
-	def on_close(self, e):
-		self.Close(True)
-
-	def on_save(self, e):
-		input_files = []
-		count = self.input_list.GetItemCount()
-		for row in range(count):
-			folder = self.input_list.GetItem(itemId=row, col=0).GetText()
-			filename = self.input_list.GetItem(itemId=row, col=1).GetText()
-			input_files.append([folder, filename])
-
-		measured_minutes = self.measured_minutes.GetValue()
-
-		Config.save(input_files=input_files, minutes=measured_minutes)
-		self.Close(True)
-		self.parent.restart()
-
-class Interface(wx.Frame):
-
-	def __init__(self, parent, title):
-		super(Interface, self).__init__(parent, title=title, size=(570 + WINDOW_SIZE_ADJUST, 100 + WINDOW_SIZE_ADJUST))
-
-		self.header = None
-		self.plot_panels = {}
-		self.current_input = 0
-		self.monitors = []
-
-		self.attributes = {
-			'Light': {
-				'col': 10,
-				'unit': 'Lux'
-			},
-			'Temperature': {
-				'col': 15,
-				'unit': 'Celsius',
-				'function': 'x * 0.1'
-			},
-			'Humidity': {
-				'col': 20,
-				'unit': 'R.H.'
-			}
-		}
-
-		w, h = self.GetClientSize()
-		self.SetSize((w, h + len(self.attributes) * (199)))
-
-		self.load_config()
-
-		if self.input_files:
-			self.init_ui(self.input_files[self.current_input])
-		else:
-			self.init_ui(None)
-
-		self.Centre()
-		self.Show()
-		self.load_input(self.current_input)
-
-	def load_config(self):
-		self.input_files = []
-		loaded_data = Config.load()
-
-		for n in loaded_data['input_files']:
-			self.input_files.append(n)
-
-		self.minutes = loaded_data['minutes']
-
-	def load_input(self, target_input):
-		self.monitors_terminate()
-
-		self.monitors = []
-		if self.input_files:
-			# updates the filename in GUI and repositions elements
-			self.current_filename.SetLabel(self.get_formatted_filename_from_path(self.input_files[target_input]))
-			self.panel.Layout()
-
-			self.monitors.append(Monitor(self.update_title, self.input_files[target_input], self.plot_panels, self.attributes, self.minutes))
-			self.monitors_start()
-
-	def get_input_files(self, path):
-		files = []
-		for file in sorted(os.listdir(path)):
-			if file.endswith('.txt'):
-				files.append(path + PATH_SEPARATOR + file)
-
-		return files
-
-	def get_formatted_filename_from_path(self, path):
-		if path:
-			appendix = ' (' + str(self.current_input + 1) + '/' + str(len(self.input_files)) + ')'
-			return path.split(PATH_SEPARATOR)[-1:][0] + appendix
-
-		return '<Error>'
-
-	def init_ui(self, input):
-		self.panel = wx.Panel(self)
-		sizer = wx.GridBagSizer(len(self.attributes) + 1, 4)
-
-		for attribute in self.attributes:
-			self.plot_panels[attribute] = PlotPanel(self.panel)
-
-		# BLOCK 0
-		# #######
-
-		self.header = None
-		if not input:
-			self.header = wx.StaticText(self.panel, wx.ID_ANY, label='No input files found. Please add the input files by clicking on Settings.')
-			sizer.Add(self.header, pos=(0, 0), span=(1, 3), flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
-		else:
-			self.header = wx.StaticText(self.panel, wx.ID_ANY, label='Loading data...')
-			sizer.Add(self.header, pos=(0, 0), span=(1, 3), flag=wx.LEFT | wx.TOP, border=5)
-
-		self.current_filename = wx.StaticText(self.panel, wx.ID_ANY, label='Loading data...')
-		sizer.Add(self.current_filename, pos=(0, 3), span=(1, 1), flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.ALIGN_RIGHT, border=5)
-
-		# BLOCK 1
-		# #######
-
-		position = 0
-		for attribute in self.attributes:
-			sizer.Add(self.plot_panels[attribute], pos=(1 + position, 0), span=(1, 4), flag=wx.ALL, border=5)
-			position += 1
-
-		# BLOCK 2
-		# #######
-		button_cancel = wx.Button(self.panel, label='Exit')
-		button_cancel.Bind(wx.EVT_BUTTON, self.close_window)
-		sizer.Add(button_cancel, pos=(1 + len(self.attributes), 0), flag=wx.LEFT | wx.ALIGN_LEFT, border=5)
-
-		button_start = wx.Button(self.panel, label='<')
-		button_start.Bind(wx.EVT_BUTTON, self.change_input_backward)
-		sizer.Add(button_start, pos=(1 + len(self.attributes), 1), flag=wx.LEFT | wx.ALIGN_RIGHT, border=100)
-
-		button_start = wx.Button(self.panel, label='>')
-		button_start.Bind(wx.EVT_BUTTON, self.change_input_forward)
-		sizer.Add(button_start, pos=(1 + len(self.attributes), 2), flag=wx.ALIGN_LEFT, border=5)
-
-		button_start = wx.Button(self.panel, label='Settings')
-		button_start.Bind(wx.EVT_BUTTON, self.show_settings)
-		sizer.Add(button_start, pos=(1 + len(self.attributes), 3), flag=wx.RIGHT | wx.ALIGN_RIGHT, border=5)
-
-		self.panel.SetSizer(sizer)
-
-	def change_input_backward(self, event):
-		self.current_input -= 1
-		if self.current_input < 0:
-			self.current_input = len(self.input_files) - 1
-
-		self.load_input(self.current_input)
-
-	def change_input_forward(self, event):
-		self.current_input += 1
-		if self.current_input >= len(self.input_files):
-			self.current_input = 0
-
-		self.load_input(self.current_input)
-
-	def show_settings(self, event):
-		modal = Settings(self)
-		modal.ShowModal()
-		modal.Destroy()
-
-	def update_title(self, text=None):
-		if text:
-			self.header.SetLabel(str(text))
-		else:
-			actual_time = strftime("%H:%M:%S")
-			self.header.SetLabel('Last time of recording: ' + str(actual_time))
-
-	def close_window(self, event):
-		self.Destroy()
-
-	def restart(self):
-		global do_restart
-
-		print('Restarting...\n')
-
-		do_restart = True
-		self.close_window(None)
-
-	def monitors_terminate(self):
-		for monitor in self.monitors:
-			monitor.terminate()
-
-	def monitors_start(self):
-		for monitor in self.monitors:
-			thread = Thread(target=monitor.run)
-			thread.daemon = True
-			thread.start()
-
-
-class PlotPanel(wx.Panel):
-
-	def __init__(self, parent, id=-1, dpi=80, **kwargs):
-		wx.Panel.__init__(self, parent, id=id, **kwargs)
-		self.figure = mpl.figure.Figure(dpi=dpi, figsize=(7, 2.3))
-		self.figure.subplots_adjust(top=0.87)
-		self.figure.subplots_adjust(bottom=0.2)
-		self.figure.subplots_adjust(left=0.1)
-		self.figure.subplots_adjust(right=0.92)
-		self.canvas = Canvas(self, -1, self.figure)
-		self.canvas.draw()
-
-		sizer = wx.BoxSizer(wx.VERTICAL)
-		sizer.Add(self.canvas, 1, wx.EXPAND)
-		self.SetSizer(sizer)
-		self.sizer = sizer
-
-	def draw(self, vals, label='', label_x='', label_y=''):
-		self.figure.clear()
-		axes = self.figure.gca()
-		axes.invert_xaxis()
-		axes.set_xlabel(label_x)
-		axes.set_ylabel(label_y)
-		axes.set_title(label)
-		axes.set_xlim([len(vals) - 1, 0])
-		axes.set_ylim(self.get_ylim(vals))
-		plot_style = self.get_plot_style(len(vals))
-		axes.text(1.05, 0.5, vals[-1:][0], horizontalalignment='center', verticalalignment='center', transform=axes.transAxes, fontsize=15)
-		axes.plot(list(reversed(range(len(vals)))), vals, plot_style, color='r', label='r')
-		self.canvas.draw()
-
-	def get_plot_style(self, length):
-		if length > 240:
-			return 'b-'
-		else:
-			return 'o-'
-
-	def get_ylim(self, vals):
-		lo = min(vals) - 10
-		hi = max(vals) + 10
-		return [lo, hi]
 
 class Monitor:
 
-	def __init__(self, update_title, filename, plot_panels, attributes, minutes):
-		self.filename = filename
-		self.plot_panel = plot_panels
-		self.vals = {}
-		self.update_title = update_title
-		self.alive = True
-		self.delay_in_seconds = 1
-		self.minutes = minutes
+    def __init__(self, update_title, filename, plot_panels, attributes, minutes):
+        self.filename = filename
+        self.plot_panel = plot_panels
+        self.vals = {}
+        self.update_title = update_title
+        self.alive = True
+        self.delay_in_seconds = 1
+        self.minutes = minutes
 
-		self.attributes = attributes
-		for attribute in attributes:
-			self.vals[attribute] = []
+        self.attributes = attributes
+        for attribute in attributes:
+            self.vals[attribute] = []
 
-		self.content_file = open(self.filename, 'r')
+        try:
+            self.content_file = open(self.filename, 'r')
+        except Exception as ex:
+            self.update_title('Error while opening file!')
+            print("Error while opening file: {0}".format(ex))
+            self.alive = False
 
-	def main(self):
-		line = None
-		reached_end = False
-		while self.alive:
-			where = self.content_file.tell()
-			last = line
-			line = self.content_file.readline()
+    def main(self):
+        reached_end = False
+        while self.alive:
+            where = self.content_file.tell()
 
-			try:
-				# get all values and add them to the list
-				for attribute in self.attributes:
-					val = int(last.split(' ')[2].split('\t')[self.attributes[attribute]['col']])
-					# apply lambda function if defined
-					if 'function' in self.attributes[attribute]:
-						fun = lambda x: eval(self.attributes[attribute]['function'])
-						val = fun(val)
+            try:
+                line = self.content_file.readline()
+            except Exception as ex:
+                self.update_title('Error while reading file!')
+                print("Error while reading file: {0}".format(ex))
+                self.alive = False
 
-					self.vals[attribute].append(val)
+            try:
+                if line:
+                    # get all values and add them to the list
+                    for attribute in self.attributes:
+                        val = int(line.split(' ')[2].split('\t')[self.attributes[attribute]['col']])
+                        # apply lambda function if defined
+                        if 'function' in self.attributes[attribute]:
+                            fun = lambda x: eval(self.attributes[attribute]['function'])
+                            val = fun(val)
 
-				if reached_end:
-					self.update_title()
+                        self.vals[attribute].append(val)
 
-				if not line:
-					if not reached_end:
-						reached_end = True
-						self.update_title()
+                    if reached_end:
+                        self.update_title()
+                else:
+                    if not reached_end:
+                        reached_end = True
+                        self.update_title()
 
-					# Check for erroneous input
-					valid = True
-					for attribute in self.attributes:
-						if not self.vals[attribute]:
-							valid = False
-							break
+                    # Check for erroneous input
+                    valid = True
+                    for attribute in self.attributes:
+                        if not self.vals[attribute]:
+                            valid = False
+                            break
 
-					if not valid:
-						self.update_title('Problem with reading some content!')
-						print('Thread: breaking!')
-						break
+                    if not valid:
+                        self.update_title('Problem with reading some content!')
+                        print('Thread: breaking!')
+                        break
 
-					# redraw the plot with the last X values
-					for attribute in self.attributes:
-						self.plot_panel[attribute].draw(self.vals[attribute][-self.minutes:], attribute, 'minutes', self.attributes[attribute]['unit'])
+                    # redraw the plot with the last X values
+                    for attribute in self.attributes:
+                        self.plot_panel[attribute].draw(self.vals[attribute][-self.minutes:], attribute, 'minutes', self.attributes[attribute]['unit'])
 
-					time.sleep(self.delay_in_seconds)
-					self.content_file.seek(where)
-			except:
-				pass
+                    time.sleep(self.delay_in_seconds)
+                    self.content_file.seek(where)
 
-		print('Thread: Terminated')
+            except Exception as ex:
+                for attribute in self.attributes:
+                    self.plot_panel[attribute].draw([], attribute, 'minutes', self.attributes[attribute]['unit'])
+                self.update_title('Error while reading file data!')
+                print("Error while reading file data: {0}".format(ex))
+                self.alive = False
 
-	def run(self):
-		self.alive = True
-		self.main()
+        print('Thread: Terminated')
 
-	def terminate(self):
-		self.alive = False
+    def run(self):
+        self.alive = True
+        self.main()
+
+    def terminate(self):
+        self.alive = False
+
 
 def main():
-	global do_restart
-	app = wx.App()
+    global do_restart
 
-	while True:
-		Interface(None, title='DEnM_Visualizer')
-		app.MainLoop()
+    root = tk.Tk()
+    app = Application(master=root)
+    app.mainloop()
 
-		if not do_restart:
-			break
-
-		do_restart = False
+    if do_restart:
+        python = sys.executable
+        os.execl(python, python, * sys.argv)
 
 
 if __name__ == "__main__":
-	main()
+    main()
