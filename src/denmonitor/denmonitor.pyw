@@ -302,6 +302,7 @@ class Application(tk.Frame):
 
     def set_status(self, text=None):
         if text:
+            text = text[:55]
             self.status_text.set(text)
         else:
             actual_time = strftime("%H:%M:%S")
@@ -322,7 +323,7 @@ class Application(tk.Frame):
         self.filename_field.grid(row=0, column=1, sticky=tk.E, columnspan=1)
 
         if not filepath:
-            self.set_status('No input files found. Please add files by clicking on Settings.')
+            self.set_status('No input files found. Please add files in Settings.')
         else:
             self.set_status('Loading data...')
 
