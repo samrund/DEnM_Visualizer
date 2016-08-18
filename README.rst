@@ -25,11 +25,6 @@ Installation on Mac OS X
 matplotlib
 ~~~~~~~~~~
 
-One convenient way to install *matplotlib* with other useful Python software is to use one of the Python scientific software collections:
-
-- `Anaconda <https://store.continuum.io/cshop/anaconda/>`_ from Continuum Analytics
-- `Canopy <https://enthought.com/products/canopy/>`_ from Enthought
-
 If you are using recent Python 2.7 or Python 3.x from `<http://www.python.org>`_, Macports or Homebrew, then you can use the standard pip installer to install *matplotlib* binaries in the form of wheels.
 
 .. code:: sh
@@ -50,23 +45,26 @@ Similarly, *DEnM-Visualizer* can be easily installed using pip.
 Installation on Windows
 -----------------------
 
+python
+~~~~~~~~~~
+
+If you don't already have Python installed, we recommend using one of the `scipy-stack
+compatible Python distributions <http://www.scipy.org/install.html>`_ such as *Continuum Anaconda*,
+*Python(x,y)*, or *WinPython*, which have matplotlib and other useful packages preinstalled.
+
+In case Python 2.7 is not installed for all users (not the default), the Microsoft Visual C++ 2008 redistributable package needs to be installed.
+
+We recommend to select "Add Python to PATH" in the installation process. This enables to invoke the Python interpreter from any particular directory.
+
+
 matplotlib
 ~~~~~~~~~~
 
-If you don't already have Python installed, we recommend using
-one of the `scipy-stack compatible Python distributions
-<http://www.scipy.org/install.html>`_ such as *Python(x,y)*, *WinPython*,
-*Enthought Canopy*, or *Continuum Anaconda*, which have matplotlib and
-many of its dependencies, plus other useful packages, preinstalled.
-We recommend to use *Python(x,y)* as it contains both *matplotlib* and *wxpython*.
-
-Otherwise, for standard Python installations, you have to install matplotlib manually using pip.
+For standard Python installations, you have to install matplotlib manually using pip.
 
 .. code:: sh
 
    pip install matplotlib
-
-In this case, you will also need to install compatible versions of *setuptools*, *numpy*, *python-dateutil*, *pytz*, *pyparsing*, and *cycler* in addition to matplotlib. In case Python 2.7 is not installed for all users (not the default), the Microsoft Visual C++ 2008 redistributable package needs to be installed.
 
 
 DEnM-Visualizer
